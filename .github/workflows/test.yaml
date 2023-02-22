@@ -4,7 +4,7 @@ on:
   push: null
   pull_request: null
   schedule: 
-    - 0 12 * * *
+    - cron: '0 12 * * *'
 
 jobs:
   test:
