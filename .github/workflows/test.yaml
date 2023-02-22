@@ -34,7 +34,7 @@ jobs:
             ${{ matrix.os }}-${{ matrix.rust }}-
       - uses: hecrj/setup-rust-action@v1
         with:
-          version: ${{ matrix.rust }}
+          rust-version: ${{ matrix.rust }}
       - name: Build
         run:
           cargo build ${{ matrix.features }} ${{ matrix.cargo_flags }}

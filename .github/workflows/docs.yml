@@ -33,7 +33,7 @@ jobs:
             docs-
       - uses: hecrj/setup-rust-action@v1
         with:
-          version: nightly
+          rust-version: nightly
       - name: Generate Docs (reference docs.rs)
         run:  |
           cargo rustdoc -- -Z unstable-options $(cargo metadata --format-version 1 | jq --raw-output '.packages | map("--extern-html-root-url=\(.name)=https://docs.rs/\(.name)/\(.version)") | join(" ")')
