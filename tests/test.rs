@@ -1,9 +1,20 @@
-use std::fmt::{Alignment, Display};
+use std::fmt::Display;
 
 use derive_more::Display;
 use proptest::option;
 use proptest::prelude::*;
 use proptest_derive::Arbitrary;
+
+#[derive(Debug, Arbitrary, Display, Clone)]
+#[allow(non_camel_case_types)]
+enum Alignment {
+    #[display(fmt = "<")]
+    Left,
+    #[display(fmt = "^")]
+    Center,
+    #[display(fmt = ">")]
+    Right,
+}
 
 #[derive(Debug, Default, Arbitrary, Display, Clone)]
 #[allow(non_camel_case_types)]
@@ -66,7 +77,10 @@ impl Display for FormatArgument {
             precision,
             trait_,
         } = self;
-        let alignment = "";
+        let alignment = alignment
+            .as_ref()
+            .map(|(fill, alignment)| format!("{}{alignment}", fill.unwrap_or_default()))
+            .unwrap_or_default();
         let hash = if *hash { "#" } else { "" };
         let zero = if *zero { "0" } else { "" };
         let width = width.map(|w| w.to_string()).unwrap_or_default();
