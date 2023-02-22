@@ -10,7 +10,8 @@ readme = "README.md"
 repository = "https://github.com/ModProg/template"
 documentation = "https://docs.rs/template"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-unicode-ident = "1.0.6"
+[dev-dependencies]
+derive_more = "0.99.17"
+proptest = "1.1.0"
+proptest-derive = "0.3.0"
+trybuild2 = "1.0.0"
