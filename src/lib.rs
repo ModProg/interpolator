@@ -1,10 +1,12 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{
-    Alignment, Binary, Debug, Display, LowerExp, LowerHex, Octal, Pointer, UpperExp, UpperHex,
-    Write,
+    Binary, Debug, Display, LowerExp, LowerHex, Octal, Pointer, UpperExp, UpperHex, Write,
 };
 use std::hash::Hash;
+
+mod hard_coded;
+use hard_coded::format_value;
 
 // type Result<T = (), E = ()> = std::result::Result<T, E>;
 
@@ -24,7 +26,7 @@ pub struct Formattable<'a> {
     lower_exp: Option<&'a dyn LowerExp>,
     lower_hex: Option<&'a dyn LowerHex>,
     octal: Option<&'a dyn Octal>,
-    pointer: Option<&'a dyn Pointer>,
+    pointer: Option<PointerWrapper<'a>>,
     upper_exp: Option<&'a dyn UpperExp>,
     upper_hex: Option<&'a dyn UpperHex>,
 }
@@ -58,23 +60,42 @@ formattable![
     debug_display, and_debug_display<Debug, Display> debug, display;
     debug, and_debug<Debug>;
     display, and_display<Display>;
-    number, and_number<Binary, Debug, Display, LowerExp, LowerHex, Octal, UpperExp, UpperHex>
+    integer, and_integer<Binary, Debug, Display, LowerExp, LowerHex, Octal, UpperExp, UpperHex>
         binary, debug, display, lower_exp, lower_hex, octal, upper_exp, upper_hex;
+    float, and_float<Debug, Display, LowerExp, UpperExp>
+        debug, display, lower_exp, upper_exp;
     binary, and_binary<Binary>;
     lower_exp, and_lower_exp<LowerExp>;
     lower_hex, and_lower_hex<LowerHex>;
     octal, and_octal<Octal>;
-    pointer, and_pointer<Pointer>;
+    // pointer, and_pointer<Pointer>;
     upper_exp, and_upper_exp<UpperExp>;
     upper_hex, and_upper_hex<UpperHex>;
 ];
 
-impl<'a, T: Display> From<&'a T> for Formattable<'a> {
+impl<'a> Formattable<'a> {
+    pub fn pointer<T: Pointer>(value: &'a T) -> Self {
+        Self::default().and_pointer(value)
+    }
+
+    pub fn and_pointer<T: Pointer>(mut self, value: &'a T) -> Self {
+        self.pointer = Some(PointerWrapper(value));
+        self
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PointerWrapper<'a>(&'a dyn Pointer);
+
+impl Pointer for PointerWrapper<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pointer::fmt(self.0, f)
+    }
+}
+
+impl<'a, T: Display + Debug> From<&'a T> for Formattable<'a> {
     fn from(value: &'a T) -> Self {
-        Self {
-            display: Some(value),
-            ..Default::default()
-        }
+        Self::debug_display(value)
     }
 }
 
@@ -87,15 +108,24 @@ fn alignment(c: u8) -> Option<Alignment> {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+enum Alignment {
+    Left,
+    Center,
+    Right,
+    #[default]
+    None,
+}
+
 #[derive(Debug, Default)]
 enum Sign {
     Plus,
     Minus,
     #[default]
-    No,
+    None,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 #[allow(non_camel_case_types)]
 enum Trait {
     #[default]
@@ -144,7 +174,8 @@ impl Trait {
 #[derive(Default, Debug)]
 struct FormatArgument<'a> {
     ident: &'a str,
-    alignment: Option<(Option<char>, Alignment)>,
+    fill: Option<char>,
+    alignment: Alignment,
     sign: Sign,
     hash: bool,
     zero: bool,
@@ -177,15 +208,16 @@ impl<'a> FormatArgument<'a> {
                 return Some(it);
             }
             if let Some(alignment) = alignment(format[fill.len_utf8()..].as_bytes()[0]) {
-                it.alignment = Some((Some(fill), alignment));
-                step(2, format)
+                it.fill = Some(fill);
+                it.alignment = alignment;
+                step(1 + fill.len_utf8(), format)
             } else if fill.is_ascii() {
                 if let Some(alignment) = alignment(fill as u8) {
-                    it.alignment = Some((None, alignment));
+                    it.alignment = alignment;
                     step(1, format);
                 }
             }
-            if format[fill.len_utf8()..].is_empty() {
+            if format.is_empty() {
                 return Some(it);
             }
             match format.as_bytes()[0] {
@@ -199,7 +231,7 @@ impl<'a> FormatArgument<'a> {
                 }
                 _ => {}
             }
-            if format[fill.len_utf8()..].is_empty() {
+            if format.is_empty() {
                 return Some(it);
             }
             if b'#' == format.as_bytes()[0] {
@@ -227,23 +259,11 @@ impl<'a> FormatArgument<'a> {
     }
 }
 
-macro_rules! w {
-    ($out:ident, $fmt:literal, $variable:ident) => {
-        write!($out, $fmt, $variable.display?).ok()?
-    };
-    ($out:ident, $fmt:literal, $variable:ident. $field:ident) => {
-        write!($out, $fmt, $variable.$field?).ok()?
-    };
-}
-
 pub fn format<K: Borrow<str> + Eq + Hash>(
     mut format: &str,
     context: HashMap<K, Formattable>,
 ) -> Option<String> {
     let format = &mut format;
-    use Alignment::*;
-    use Sign::*;
-    use Trait::*;
     let mut out = String::with_capacity(format.len());
     while !format.is_empty() {
         if format.starts_with("{{") || format.starts_with("}}") {
@@ -255,6 +275,7 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
             step(1, format);
             let FormatArgument {
                 ident,
+                fill,
                 alignment,
                 sign,
                 hash,
@@ -263,541 +284,37 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
                 precision,
                 trait_,
             } = FormatArgument::from_str(format)?;
-            let wi = width.unwrap_or(0);
-            let pr = precision.unwrap_or(usize::MAX);
-            let v = context.get(ident)?;
-            #[rustfmt::skip]
-            match (alignment, sign, hash, zero, trait_) { 
-                (None, No, false, false, Display) => w!(out, "{:wi$.pr$}", v.display),
-                (None, No, false, false, Question) => w!(out, "{:wi$.pr$?}", v.debug),
-                (None, No, false, false, xQuestion) => w!(out, "{:wi$.pr$x?}", v.debug),
-                (None, No, false, false, XQuestion) => w!(out, "{:wi$.pr$X?}", v.debug),
-                (None, No, false, false, x) => w!(out, "{:wi$.pr$x}", v.lower_hex),
-                (None, No, false, false, X) => w!(out, "{:wi$.pr$X}", v.upper_hex),
-                (None, No, false, false, b) => w!(out, "{:wi$.pr$b}", v.binary),
-                (None, No, false, false, o) => w!(out, "{:wi$.pr$o}", v.octal),
-                (None, No, false, false, e) => w!(out, "{:wi$.pr$e}", v.lower_exp),
-                (None, No, false, false, E) => w!(out, "{:wi$.pr$E}", v.upper_exp),
-                (None, No, false, false, p) => w!(out, "{:wi$.pr$p}", v.pointer),
-                (None, No, false, true, Display) => w!(out, "{:0wi$.pr$}", v.display),
-                (None, No, false, true, Question) => w!(out, "{:0?}", v.debug),
-                (None, No, false, true, xQuestion) => w!(out, "{:0x?}", v.debug),
-                (None, No, false, true, XQuestion) => w!(out, "{:0X?}", v.debug),
-                (None, No, false, true, x) => w!(out, "{:0wi$.pr$x}", v.lower_hex),
-                (None, No, false, true, X) => w!(out, "{:0wi$.pr$X}", v.upper_hex),
-                (None, No, false, true, b) => w!(out, "{:0wi$.pr$b}", v.binary),
-                (None, No, false, true, o) => w!(out, "{:0wi$.pr$o}", v.octal),
-                (None, No, false, true, e) => w!(out, "{:0wi$.pr$e}", v.lower_exp),
-                (None, No, false, true, E) => w!(out, "{:0wi$.pr$E}", v.upper_exp),
-                (None, No, false, true, p) => w!(out, "{:0wi$.pr$p}", v.pointer),
-                (None, Plus, false, false, Display) => w!(out, "{:+wi$.pr$}", v.display),
-                (None, Plus, false, false, Question) => w!(out, "{:+wi$.pr$?}", v.debug),
-                (None, Plus, false, false, xQuestion) => w!(out, "{:+wi$.pr$x?}", v.debug),
-                (None, Plus, false, false, XQuestion) => w!(out, "{:+wi$.pr$X?}", v.debug),
-                (None, Plus, false, false, x) => w!(out, "{:+wi$.pr$x}", v.lower_hex),
-                (None, Plus, false, false, X) => w!(out, "{:+wi$.pr$X}", v.upper_hex),
-                (None, Plus, false, false, b) => w!(out, "{:+wi$.pr$b}", v.binary),
-                (None, Plus, false, false, o) => w!(out, "{:+wi$.pr$o}", v.octal),
-                (None, Plus, false, false, e) => w!(out, "{:+wi$.pr$e}", v.lower_exp),
-                (None, Plus, false, false, E) => w!(out, "{:+wi$.pr$E}", v.upper_exp),
-                (None, Plus, false, false, p) => w!(out, "{:+wi$.pr$p}", v.pointer),
-                (None, Plus, false, true, Display) => w!(out, "{:+0wi$.pr$}", v.display),
-                (None, Plus, false, true, Question) => w!(out, "{:+0wi$.pr$?}", v.debug),
-                (None, Plus, false, true, xQuestion) => w!(out, "{:+0wi$.pr$x?}", v.debug),
-                (None, Plus, false, true, XQuestion) => w!(out, "{:+0wi$.pr$X?}", v.debug),
-                (None, Plus, false, true, x) => w!(out, "{:+0wi$.pr$x}", v.lower_hex),
-                (None, Plus, false, true, X) => w!(out, "{:+0wi$.pr$X}", v.upper_hex),
-                (None, Plus, false, true, b) => w!(out, "{:+0wi$.pr$b}", v.binary),
-                (None, Plus, false, true, o) => w!(out, "{:+0wi$.pr$o}", v.octal),
-                (None, Plus, false, true, e) => w!(out, "{:+0wi$.pr$e}", v.lower_exp),
-                (None, Plus, false, true, E) => w!(out, "{:+0wi$.pr$E}", v.upper_exp),
-                (None, Plus, false, true, p) => w!(out, "{:+0wi$.pr$p}", v.pointer),
-                (None, Minus, false, false, Display) => w!(out, "{:-wi$.pr$}", v.display),
-                (None, Minus, false, false, Question) => w!(out, "{:-wi$.pr$?}", v.debug),
-                (None, Minus, false, false, xQuestion) => w!(out, "{:-wi$.pr$x?}", v.debug),
-                (None, Minus, false, false, XQuestion) => w!(out, "{:-wi$.pr$X?}", v.debug),
-                (None, Minus, false, false, x) => w!(out, "{:-wi$.pr$x}", v.lower_hex),
-                (None, Minus, false, false, X) => w!(out, "{:-wi$.pr$X}", v.upper_hex),
-                (None, Minus, false, false, b) => w!(out, "{:-wi$.pr$b}", v.binary),
-                (None, Minus, false, false, o) => w!(out, "{:-wi$.pr$o}", v.octal),
-                (None, Minus, false, false, e) => w!(out, "{:-wi$.pr$e}", v.lower_exp),
-                (None, Minus, false, false, E) => w!(out, "{:-wi$.pr$E}", v.upper_exp),
-                (None, Minus, false, false, p) => w!(out, "{:-wi$.pr$p}", v.pointer),
-                (None, Minus, false, true, Display) => w!(out, "{:-0wi$.pr$}", v.display),
-                (None, Minus, false, true, Question) => w!(out, "{:-0wi$.pr$?}", v.debug),
-                (None, Minus, false, true, xQuestion) => w!(out, "{:-0wi$.pr$x?}", v.debug),
-                (None, Minus, false, true, XQuestion) => w!(out, "{:-0wi$.pr$X?}", v.debug),
-                (None, Minus, false, true, x) => w!(out, "{:-0wi$.pr$x}", v.lower_hex),
-                (None, Minus, false, true, X) => w!(out, "{:-0wi$.pr$X}", v.upper_hex),
-                (None, Minus, false, true, b) => w!(out, "{:-0wi$.pr$b}", v.binary),
-                (None, Minus, false, true, o) => w!(out, "{:-0wi$.pr$o}", v.octal),
-                (None, Minus, false, true, e) => w!(out, "{:-0wi$.pr$e}", v.lower_exp),
-                (None, Minus, false, true, E) => w!(out, "{:-0wi$.pr$E}", v.upper_exp),
-                (None, Minus, false, true, p) => w!(out, "{:-0wi$.pr$p}", v.pointer),
-                (Some((None, Left)), No, false, false, Display) => w!(out, "{:<wi$.pr$}", v.display),
-                (Some((None, Left)), No, false, false, Question) => w!(out, "{:<wi$.pr$?}", v.debug),
-                (Some((None, Left)), No, false, false, xQuestion) => w!(out, "{:<wi$.pr$x?}", v.debug),
-                (Some((None, Left)), No, false, false, XQuestion) => w!(out, "{:<wi$.pr$X?}", v.debug),
-                (Some((None, Left)), No, false, false, x) => w!(out, "{:<wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), No, false, false, X) => w!(out, "{:<wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), No, false, false, b) => w!(out, "{:<wi$.pr$b}", v.binary),
-                (Some((None, Left)), No, false, false, o) => w!(out, "{:<wi$.pr$o}", v.octal),
-                (Some((None, Left)), No, false, false, e) => w!(out, "{:<wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), No, false, false, E) => w!(out, "{:<wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), No, false, false, p) => w!(out, "{:<wi$.pr$p}", v.pointer),
-                (Some((None, Left)), No, false, true, Display) => w!(out, "{:<0wi$.pr$}", v.display),
-                (Some((None, Left)), No, false, true, Question) => w!(out, "{:<0wi$.pr$?}", v.debug),
-                (Some((None, Left)), No, false, true, xQuestion) => w!(out, "{:<0wi$.pr$x?}", v.debug),
-                (Some((None, Left)), No, false, true, XQuestion) => w!(out, "{:<0wi$.pr$X?}", v.debug),
-                (Some((None, Left)), No, false, true, x) => w!(out, "{:<0wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), No, false, true, X) => w!(out, "{:<0wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), No, false, true, b) => w!(out, "{:<0wi$.pr$b}", v.binary),
-                (Some((None, Left)), No, false, true, o) => w!(out, "{:<0wi$.pr$o}", v.octal),
-                (Some((None, Left)), No, false, true, e) => w!(out, "{:<0wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), No, false, true, E) => w!(out, "{:<0wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), No, false, true, p) => w!(out, "{:<0wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Plus, false, false, Display) => w!(out, "{:<+wi$.pr$}", v.display),
-                (Some((None, Left)), Plus, false, false, Question) => w!(out, "{:<+wi$.pr$?}", v.debug),
-                (Some((None, Left)), Plus, false, false, xQuestion) => w!(out, "{:<+wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Plus, false, false, XQuestion) => w!(out, "{:<+wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Plus, false, false, x) => w!(out, "{:<+wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Plus, false, false, X) => w!(out, "{:<+wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Plus, false, false, b) => w!(out, "{:<+wi$.pr$b}", v.binary),
-                (Some((None, Left)), Plus, false, false, o) => w!(out, "{:<+wi$.pr$o}", v.octal),
-                (Some((None, Left)), Plus, false, false, e) => w!(out, "{:<+wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Plus, false, false, E) => w!(out, "{:<+wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Plus, false, false, p) => w!(out, "{:<+wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Plus, false, true, Display) => w!(out, "{:<+0wi$.pr$}", v.display),
-                (Some((None, Left)), Plus, false, true, Question) => w!(out, "{:<+0wi$.pr$?}", v.debug),
-                (Some((None, Left)), Plus, false, true, xQuestion) => w!(out, "{:<+0wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Plus, false, true, XQuestion) => w!(out, "{:<+0wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Plus, false, true, x) => w!(out, "{:<+0wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Plus, false, true, X) => w!(out, "{:<+0wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Plus, false, true, b) => w!(out, "{:<+0wi$.pr$b}", v.binary),
-                (Some((None, Left)), Plus, false, true, o) => w!(out, "{:<+0wi$.pr$o}", v.octal),
-                (Some((None, Left)), Plus, false, true, e) => w!(out, "{:<+0wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Plus, false, true, E) => w!(out, "{:<+0wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Plus, false, true, p) => w!(out, "{:<+0wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Minus, false, false, Display) => w!(out, "{:<-wi$.pr$}", v.display),
-                (Some((None, Left)), Minus, false, false, Question) => w!(out, "{:<-wi$.pr$?}", v.debug),
-                (Some((None, Left)), Minus, false, false, xQuestion) => w!(out, "{:<-wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Minus, false, false, XQuestion) => w!(out, "{:<-wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Minus, false, false, x) => w!(out, "{:<-wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Minus, false, false, X) => w!(out, "{:<-wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Minus, false, false, b) => w!(out, "{:<-wi$.pr$b}", v.binary),
-                (Some((None, Left)), Minus, false, false, o) => w!(out, "{:<-wi$.pr$o}", v.octal),
-                (Some((None, Left)), Minus, false, false, e) => w!(out, "{:<-wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Minus, false, false, E) => w!(out, "{:<-wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Minus, false, false, p) => w!(out, "{:<-wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Minus, false, true, Display) => w!(out, "{:<-0wi$.pr$}", v.display),
-                (Some((None, Left)), Minus, false, true, Question) => w!(out, "{:<-0wi$.pr$?}", v.debug),
-                (Some((None, Left)), Minus, false, true, xQuestion) => w!(out, "{:<-0wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Minus, false, true, XQuestion) => w!(out, "{:<-0wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Minus, false, true, x) => w!(out, "{:<-0wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Minus, false, true, X) => w!(out, "{:<-0wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Minus, false, true, b) => w!(out, "{:<-0wi$.pr$b}", v.binary),
-                (Some((None, Left)), Minus, false, true, o) => w!(out, "{:<-0wi$.pr$o}", v.octal),
-                (Some((None, Left)), Minus, false, true, e) => w!(out, "{:<-0wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Minus, false, true, E) => w!(out, "{:<-0wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Minus, false, true, p) => w!(out, "{:<-0wi$.pr$p}", v.pointer),
-                (Some((None, Center)), No, false, false, Display) => w!(out, "{:^wi$.pr$}", v.display),
-                (Some((None, Center)), No, false, false, Question) => w!(out, "{:^wi$.pr$?}", v.debug),
-                (Some((None, Center)), No, false, false, xQuestion) => w!(out, "{:^wi$.pr$x?}", v.debug),
-                (Some((None, Center)), No, false, false, XQuestion) => w!(out, "{:^wi$.pr$X?}", v.debug),
-                (Some((None, Center)), No, false, false, x) => w!(out, "{:^wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), No, false, false, X) => w!(out, "{:^wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), No, false, false, b) => w!(out, "{:^wi$.pr$b}", v.binary),
-                (Some((None, Center)), No, false, false, o) => w!(out, "{:^wi$.pr$o}", v.octal),
-                (Some((None, Center)), No, false, false, e) => w!(out, "{:^wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), No, false, false, E) => w!(out, "{:^wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), No, false, false, p) => w!(out, "{:^wi$.pr$p}", v.pointer),
-                (Some((None, Center)), No, false, true, Display) => w!(out, "{:^0wi$.pr$}", v.display),
-                (Some((None, Center)), No, false, true, Question) => w!(out, "{:^0wi$.pr$?}", v.debug),
-                (Some((None, Center)), No, false, true, xQuestion) => w!(out, "{:^0wi$.pr$x?}", v.debug),
-                (Some((None, Center)), No, false, true, XQuestion) => w!(out, "{:^0wi$.pr$X?}", v.debug),
-                (Some((None, Center)), No, false, true, x) => w!(out, "{:^0wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), No, false, true, X) => w!(out, "{:^0wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), No, false, true, b) => w!(out, "{:^0wi$.pr$b}", v.binary),
-                (Some((None, Center)), No, false, true, o) => w!(out, "{:^0wi$.pr$o}", v.octal),
-                (Some((None, Center)), No, false, true, e) => w!(out, "{:^0wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), No, false, true, E) => w!(out, "{:^0wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), No, false, true, p) => w!(out, "{:^0wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Plus, false, false, Display) => w!(out, "{:^+wi$.pr$}", v.display),
-                (Some((None, Center)), Plus, false, false, Question) => w!(out, "{:^+wi$.pr$?}", v.debug),
-                (Some((None, Center)), Plus, false, false, xQuestion) => w!(out, "{:^+wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Plus, false, false, XQuestion) => w!(out, "{:^+wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Plus, false, false, x) => w!(out, "{:^+wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Plus, false, false, X) => w!(out, "{:^+wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Plus, false, false, b) => w!(out, "{:^+wi$.pr$b}", v.binary),
-                (Some((None, Center)), Plus, false, false, o) => w!(out, "{:^+wi$.pr$o}", v.octal),
-                (Some((None, Center)), Plus, false, false, e) => w!(out, "{:^+wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Plus, false, false, E) => w!(out, "{:^+wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Plus, false, false, p) => w!(out, "{:^+wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Plus, false, true, Display) => w!(out, "{:^+0wi$.pr$}", v.display),
-                (Some((None, Center)), Plus, false, true, Question) => w!(out, "{:^+0wi$.pr$?}", v.debug),
-                (Some((None, Center)), Plus, false, true, xQuestion) => w!(out, "{:^+0wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Plus, false, true, XQuestion) => w!(out, "{:^+0wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Plus, false, true, x) => w!(out, "{:^+0wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Plus, false, true, X) => w!(out, "{:^+0wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Plus, false, true, b) => w!(out, "{:^+0wi$.pr$b}", v.binary),
-                (Some((None, Center)), Plus, false, true, o) => w!(out, "{:^+0wi$.pr$o}", v.octal),
-                (Some((None, Center)), Plus, false, true, e) => w!(out, "{:^+0wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Plus, false, true, E) => w!(out, "{:^+0wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Plus, false, true, p) => w!(out, "{:^+0wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Minus, false, false, Display) => w!(out, "{:^-wi$.pr$}", v.display),
-                (Some((None, Center)), Minus, false, false, Question) => w!(out, "{:^-wi$.pr$?}", v.debug),
-                (Some((None, Center)), Minus, false, false, xQuestion) => w!(out, "{:^-wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Minus, false, false, XQuestion) => w!(out, "{:^-wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Minus, false, false, x) => w!(out, "{:^-wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Minus, false, false, X) => w!(out, "{:^-wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Minus, false, false, b) => w!(out, "{:^-wi$.pr$b}", v.binary),
-                (Some((None, Center)), Minus, false, false, o) => w!(out, "{:^-wi$.pr$o}", v.octal),
-                (Some((None, Center)), Minus, false, false, e) => w!(out, "{:^-wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Minus, false, false, E) => w!(out, "{:^-wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Minus, false, false, p) => w!(out, "{:^-wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Minus, false, true, Display) => w!(out, "{:^-0wi$.pr$}", v.display),
-                (Some((None, Center)), Minus, false, true, Question) => w!(out, "{:^-0wi$.pr$?}", v.debug),
-                (Some((None, Center)), Minus, false, true, xQuestion) => w!(out, "{:^-0wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Minus, false, true, XQuestion) => w!(out, "{:^-0wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Minus, false, true, x) => w!(out, "{:^-0wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Minus, false, true, X) => w!(out, "{:^-0wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Minus, false, true, b) => w!(out, "{:^-0wi$.pr$b}", v.binary),
-                (Some((None, Center)), Minus, false, true, o) => w!(out, "{:^-0wi$.pr$o}", v.octal),
-                (Some((None, Center)), Minus, false, true, e) => w!(out, "{:^-0wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Minus, false, true, E) => w!(out, "{:^-0wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Minus, false, true, p) => w!(out, "{:^-0wi$.pr$p}", v.pointer),
-                (Some((None, Right)), No, false, false, Display) => w!(out, "{:>wi$.pr$}", v.display),
-                (Some((None, Right)), No, false, false, Question) => w!(out, "{:>wi$.pr$?}", v.debug),
-                (Some((None, Right)), No, false, false, xQuestion) => w!(out, "{:>wi$.pr$x?}", v.debug),
-                (Some((None, Right)), No, false, false, XQuestion) => w!(out, "{:>wi$.pr$X?}", v.debug),
-                (Some((None, Right)), No, false, false, x) => w!(out, "{:>wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), No, false, false, X) => w!(out, "{:>wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), No, false, false, b) => w!(out, "{:>wi$.pr$b}", v.binary),
-                (Some((None, Right)), No, false, false, o) => w!(out, "{:>wi$.pr$o}", v.octal),
-                (Some((None, Right)), No, false, false, e) => w!(out, "{:>wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), No, false, false, E) => w!(out, "{:>wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), No, false, false, p) => w!(out, "{:>wi$.pr$p}", v.pointer),
-                (Some((None, Right)), No, false, true, Display) => w!(out, "{:>0wi$.pr$}", v.display),
-                (Some((None, Right)), No, false, true, Question) => w!(out, "{:>0wi$.pr$?}", v.debug),
-                (Some((None, Right)), No, false, true, xQuestion) => w!(out, "{:>0wi$.pr$x?}", v.debug),
-                (Some((None, Right)), No, false, true, XQuestion) => w!(out, "{:>0wi$.pr$X?}", v.debug),
-                (Some((None, Right)), No, false, true, x) => w!(out, "{:>0wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), No, false, true, X) => w!(out, "{:>0wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), No, false, true, b) => w!(out, "{:>0wi$.pr$b}", v.binary),
-                (Some((None, Right)), No, false, true, o) => w!(out, "{:>0wi$.pr$o}", v.octal),
-                (Some((None, Right)), No, false, true, e) => w!(out, "{:>0wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), No, false, true, E) => w!(out, "{:>0wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), No, false, true, p) => w!(out, "{:>0wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Plus, false, false, Display) => w!(out, "{:>+wi$.pr$}", v.display),
-                (Some((None, Right)), Plus, false, false, Question) => w!(out, "{:>+wi$.pr$?}", v.debug),
-                (Some((None, Right)), Plus, false, false, xQuestion) => w!(out, "{:>+wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Plus, false, false, XQuestion) => w!(out, "{:>+wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Plus, false, false, x) => w!(out, "{:>+wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Plus, false, false, X) => w!(out, "{:>+wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Plus, false, false, b) => w!(out, "{:>+wi$.pr$b}", v.binary),
-                (Some((None, Right)), Plus, false, false, o) => w!(out, "{:>+wi$.pr$o}", v.octal),
-                (Some((None, Right)), Plus, false, false, e) => w!(out, "{:>+wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Plus, false, false, E) => w!(out, "{:>+wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Plus, false, false, p) => w!(out, "{:>+wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Plus, false, true, Display) => w!(out, "{:>+0wi$.pr$}", v.display),
-                (Some((None, Right)), Plus, false, true, Question) => w!(out, "{:>+0wi$.pr$?}", v.debug),
-                (Some((None, Right)), Plus, false, true, xQuestion) => w!(out, "{:>+0wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Plus, false, true, XQuestion) => w!(out, "{:>+0wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Plus, false, true, x) => w!(out, "{:>+0wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Plus, false, true, X) => w!(out, "{:>+0wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Plus, false, true, b) => w!(out, "{:>+0wi$.pr$b}", v.binary),
-                (Some((None, Right)), Plus, false, true, o) => w!(out, "{:>+0wi$.pr$o}", v.octal),
-                (Some((None, Right)), Plus, false, true, e) => w!(out, "{:>+0wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Plus, false, true, E) => w!(out, "{:>+0wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Plus, false, true, p) => w!(out, "{:>+0wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Minus, false, false, Display) => w!(out, "{:>-wi$.pr$}", v.display),
-                (Some((None, Right)), Minus, false, false, Question) => w!(out, "{:>-wi$.pr$?}", v.debug),
-                (Some((None, Right)), Minus, false, false, xQuestion) => w!(out, "{:>-wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Minus, false, false, XQuestion) => w!(out, "{:>-wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Minus, false, false, x) => w!(out, "{:>-wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Minus, false, false, X) => w!(out, "{:>-wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Minus, false, false, b) => w!(out, "{:>-wi$.pr$b}", v.binary),
-                (Some((None, Right)), Minus, false, false, o) => w!(out, "{:>-wi$.pr$o}", v.octal),
-                (Some((None, Right)), Minus, false, false, e) => w!(out, "{:>-wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Minus, false, false, E) => w!(out, "{:>-wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Minus, false, false, p) => w!(out, "{:>-wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Minus, false, true, Display) => w!(out, "{:>-0wi$.pr$}", v.display),
-                (Some((None, Right)), Minus, false, true, Question) => w!(out, "{:>-0wi$.pr$?}", v.debug),
-                (Some((None, Right)), Minus, false, true, xQuestion) => w!(out, "{:>-0wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Minus, false, true, XQuestion) => w!(out, "{:>-0wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Minus, false, true, x) => w!(out, "{:>-0wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Minus, false, true, X) => w!(out, "{:>-0wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Minus, false, true, b) => w!(out, "{:>-0wi$.pr$b}", v.binary),
-                (Some((None, Right)), Minus, false, true, o) => w!(out, "{:>-0wi$.pr$o}", v.octal),
-                (Some((None, Right)), Minus, false, true, e) => w!(out, "{:>-0wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Minus, false, true, E) => w!(out, "{:>-0wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Minus, false, true, p) => w!(out, "{:>-0wi$.pr$p}", v.pointer),
-                (None, No, true, false, Display) => w!(out, "{:#wi$.pr$}", v.display),
-                (None, No, true, false, Question) => w!(out, "{:#wi$.pr$?}", v.debug),
-                (None, No, true, false, xQuestion) => w!(out, "{:#wi$.pr$x?}", v.debug),
-                (None, No, true, false, XQuestion) => w!(out, "{:#wi$.pr$X?}", v.debug),
-                (None, No, true, false, x) => w!(out, "{:#wi$.pr$x}", v.lower_hex),
-                (None, No, true, false, X) => w!(out, "{:#wi$.pr$X}", v.upper_hex),
-                (None, No, true, false, b) => w!(out, "{:#wi$.pr$b}", v.binary),
-                (None, No, true, false, o) => w!(out, "{:#wi$.pr$o}", v.octal),
-                (None, No, true, false, e) => w!(out, "{:#wi$.pr$e}", v.lower_exp),
-                (None, No, true, false, E) => w!(out, "{:#wi$.pr$E}", v.upper_exp),
-                (None, No, true, false, p) => w!(out, "{:#wi$.pr$p}", v.pointer),
-                (None, No, true, true, Display) => w!(out, "{:#0wi$.pr$}", v.display),
-                (None, No, true, true, Question) => w!(out, "{:#0wi$.pr$?}", v.debug),
-                (None, No, true, true, xQuestion) => w!(out, "{:#0wi$.pr$x?}", v.debug),
-                (None, No, true, true, XQuestion) => w!(out, "{:#0wi$.pr$X?}", v.debug),
-                (None, No, true, true, x) => w!(out, "{:#0wi$.pr$x}", v.lower_hex),
-                (None, No, true, true, X) => w!(out, "{:#0wi$.pr$X}", v.upper_hex),
-                (None, No, true, true, b) => w!(out, "{:#0wi$.pr$b}", v.binary),
-                (None, No, true, true, o) => w!(out, "{:#0wi$.pr$o}", v.octal),
-                (None, No, true, true, e) => w!(out, "{:#0wi$.pr$e}", v.lower_exp),
-                (None, No, true, true, E) => w!(out, "{:#0wi$.pr$E}", v.upper_exp),
-                (None, No, true, true, p) => w!(out, "{:#0wi$.pr$p}", v.pointer),
-                (None, Plus, true, false, Display) => w!(out, "{:+#wi$.pr$}", v.display),
-                (None, Plus, true, false, Question) => w!(out, "{:+#wi$.pr$?}", v.debug),
-                (None, Plus, true, false, xQuestion) => w!(out, "{:+#wi$.pr$x?}", v.debug),
-                (None, Plus, true, false, XQuestion) => w!(out, "{:+#wi$.pr$X?}", v.debug),
-                (None, Plus, true, false, x) => w!(out, "{:+#wi$.pr$x}", v.lower_hex),
-                (None, Plus, true, false, X) => w!(out, "{:+#wi$.pr$X}", v.upper_hex),
-                (None, Plus, true, false, b) => w!(out, "{:+#wi$.pr$b}", v.binary),
-                (None, Plus, true, false, o) => w!(out, "{:+#wi$.pr$o}", v.octal),
-                (None, Plus, true, false, e) => w!(out, "{:+#wi$.pr$e}", v.lower_exp),
-                (None, Plus, true, false, E) => w!(out, "{:+#wi$.pr$E}", v.upper_exp),
-                (None, Plus, true, false, p) => w!(out, "{:+#wi$.pr$p}", v.pointer),
-                (None, Plus, true, true, Display) => w!(out, "{:+#0wi$.pr$}", v.display),
-                (None, Plus, true, true, Question) => w!(out, "{:+#0wi$.pr$?}", v.debug),
-                (None, Plus, true, true, xQuestion) => w!(out, "{:+#0wi$.pr$x?}", v.debug),
-                (None, Plus, true, true, XQuestion) => w!(out, "{:+#0wi$.pr$X?}", v.debug),
-                (None, Plus, true, true, x) => w!(out, "{:+#0wi$.pr$x}", v.lower_hex),
-                (None, Plus, true, true, X) => w!(out, "{:+#0wi$.pr$X}", v.upper_hex),
-                (None, Plus, true, true, b) => w!(out, "{:+#0wi$.pr$b}", v.binary),
-                (None, Plus, true, true, o) => w!(out, "{:+#0wi$.pr$o}", v.octal),
-                (None, Plus, true, true, e) => w!(out, "{:+#0wi$.pr$e}", v.lower_exp),
-                (None, Plus, true, true, E) => w!(out, "{:+#0wi$.pr$E}", v.upper_exp),
-                (None, Plus, true, true, p) => w!(out, "{:+#0wi$.pr$p}", v.pointer),
-                (None, Minus, true, false, Display) => w!(out, "{:-#wi$.pr$}", v.display),
-                (None, Minus, true, false, Question) => w!(out, "{:-#wi$.pr$?}", v.debug),
-                (None, Minus, true, false, xQuestion) => w!(out, "{:-#wi$.pr$x?}", v.debug),
-                (None, Minus, true, false, XQuestion) => w!(out, "{:-#wi$.pr$X?}", v.debug),
-                (None, Minus, true, false, x) => w!(out, "{:-#wi$.pr$x}", v.lower_hex),
-                (None, Minus, true, false, X) => w!(out, "{:-#wi$.pr$X}", v.upper_hex),
-                (None, Minus, true, false, b) => w!(out, "{:-#wi$.pr$b}", v.binary),
-                (None, Minus, true, false, o) => w!(out, "{:-#wi$.pr$o}", v.octal),
-                (None, Minus, true, false, e) => w!(out, "{:-#wi$.pr$e}", v.lower_exp),
-                (None, Minus, true, false, E) => w!(out, "{:-#wi$.pr$E}", v.upper_exp),
-                (None, Minus, true, false, p) => w!(out, "{:-#wi$.pr$p}", v.pointer),
-                (None, Minus, true, true, Display) => w!(out, "{:-#0wi$.pr$}", v.display),
-                (None, Minus, true, true, Question) => w!(out, "{:-#0wi$.pr$?}", v.debug),
-                (None, Minus, true, true, xQuestion) => w!(out, "{:-#0wi$.pr$x?}", v.debug),
-                (None, Minus, true, true, XQuestion) => w!(out, "{:-#0wi$.pr$X?}", v.debug),
-                (None, Minus, true, true, x) => w!(out, "{:-#0wi$.pr$x}", v.lower_hex),
-                (None, Minus, true, true, X) => w!(out, "{:-#0wi$.pr$X}", v.upper_hex),
-                (None, Minus, true, true, b) => w!(out, "{:-#0wi$.pr$b}", v.binary),
-                (None, Minus, true, true, o) => w!(out, "{:-#0wi$.pr$o}", v.octal),
-                (None, Minus, true, true, e) => w!(out, "{:-#0wi$.pr$e}", v.lower_exp),
-                (None, Minus, true, true, E) => w!(out, "{:-#0wi$.pr$E}", v.upper_exp),
-                (None, Minus, true, true, p) => w!(out, "{:-#0wi$.pr$p}", v.pointer),
-                (Some((None, Left)), No, true, false, Display) => w!(out, "{:<#wi$.pr$}", v.display),
-                (Some((None, Left)), No, true, false, Question) => w!(out, "{:<#wi$.pr$?}", v.debug),
-                (Some((None, Left)), No, true, false, xQuestion) => w!(out, "{:<#wi$.pr$x?}", v.debug),
-                (Some((None, Left)), No, true, false, XQuestion) => w!(out, "{:<#wi$.pr$X?}", v.debug),
-                (Some((None, Left)), No, true, false, x) => w!(out, "{:<#wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), No, true, false, X) => w!(out, "{:<#wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), No, true, false, b) => w!(out, "{:<#wi$.pr$b}", v.binary),
-                (Some((None, Left)), No, true, false, o) => w!(out, "{:<#wi$.pr$o}", v.octal),
-                (Some((None, Left)), No, true, false, e) => w!(out, "{:<#wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), No, true, false, E) => w!(out, "{:<#wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), No, true, false, p) => w!(out, "{:<#wi$.pr$p}", v.pointer),
-                (Some((None, Left)), No, true, true, Display) => w!(out, "{:<#0wi$.pr$}", v.display),
-                (Some((None, Left)), No, true, true, Question) => w!(out, "{:<#0wi$.pr$?}", v.debug),
-                (Some((None, Left)), No, true, true, xQuestion) => w!(out, "{:<#0wi$.pr$x?}", v.debug),
-                (Some((None, Left)), No, true, true, XQuestion) => w!(out, "{:<#0wi$.pr$X?}", v.debug),
-                (Some((None, Left)), No, true, true, x) => w!(out, "{:<#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), No, true, true, X) => w!(out, "{:<#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), No, true, true, b) => w!(out, "{:<#0wi$.pr$b}", v.binary),
-                (Some((None, Left)), No, true, true, o) => w!(out, "{:<#0wi$.pr$o}", v.octal),
-                (Some((None, Left)), No, true, true, e) => w!(out, "{:<#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), No, true, true, E) => w!(out, "{:<#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), No, true, true, p) => w!(out, "{:<#0wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Plus, true, false, Display) => w!(out, "{:<+#wi$.pr$}", v.display),
-                (Some((None, Left)), Plus, true, false, Question) => w!(out, "{:<+#wi$.pr$?}", v.debug),
-                (Some((None, Left)), Plus, true, false, xQuestion) => w!(out, "{:<+#wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Plus, true, false, XQuestion) => w!(out, "{:<+#wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Plus, true, false, x) => w!(out, "{:<+#wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Plus, true, false, X) => w!(out, "{:<+#wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Plus, true, false, b) => w!(out, "{:<+#wi$.pr$b}", v.binary),
-                (Some((None, Left)), Plus, true, false, o) => w!(out, "{:<+#wi$.pr$o}", v.octal),
-                (Some((None, Left)), Plus, true, false, e) => w!(out, "{:<+#wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Plus, true, false, E) => w!(out, "{:<+#wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Plus, true, false, p) => w!(out, "{:<+#wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Plus, true, true, Display) => w!(out, "{:<+#0wi$.pr$}", v.display),
-                (Some((None, Left)), Plus, true, true, Question) => w!(out, "{:<+#0wi$.pr$?}", v.debug),
-                (Some((None, Left)), Plus, true, true, xQuestion) => w!(out, "{:<+#0wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Plus, true, true, XQuestion) => w!(out, "{:<+#0wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Plus, true, true, x) => w!(out, "{:<+#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Plus, true, true, X) => w!(out, "{:<+#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Plus, true, true, b) => w!(out, "{:<+#0wi$.pr$b}", v.binary),
-                (Some((None, Left)), Plus, true, true, o) => w!(out, "{:<+#0wi$.pr$o}", v.octal),
-                (Some((None, Left)), Plus, true, true, e) => w!(out, "{:<+#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Plus, true, true, E) => w!(out, "{:<+#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Plus, true, true, p) => w!(out, "{:<+#0wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Minus, true, false, Display) => w!(out, "{:<-#wi$.pr$}", v.display),
-                (Some((None, Left)), Minus, true, false, Question) => w!(out, "{:<-#wi$.pr$?}", v.debug),
-                (Some((None, Left)), Minus, true, false, xQuestion) => w!(out, "{:<-#wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Minus, true, false, XQuestion) => w!(out, "{:<-#wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Minus, true, false, x) => w!(out, "{:<-#wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Minus, true, false, X) => w!(out, "{:<-#wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Minus, true, false, b) => w!(out, "{:<-#wi$.pr$b}", v.binary),
-                (Some((None, Left)), Minus, true, false, o) => w!(out, "{:<-#wi$.pr$o}", v.octal),
-                (Some((None, Left)), Minus, true, false, e) => w!(out, "{:<-#wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Minus, true, false, E) => w!(out, "{:<-#wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Minus, true, false, p) => w!(out, "{:<-#wi$.pr$p}", v.pointer),
-                (Some((None, Left)), Minus, true, true, Display) => w!(out, "{:<-#0wi$.pr$}", v.display),
-                (Some((None, Left)), Minus, true, true, Question) => w!(out, "{:<-#0wi$.pr$?}", v.debug),
-                (Some((None, Left)), Minus, true, true, xQuestion) => w!(out, "{:<-#0wi$.pr$x?}", v.debug),
-                (Some((None, Left)), Minus, true, true, XQuestion) => w!(out, "{:<-#0wi$.pr$X?}", v.debug),
-                (Some((None, Left)), Minus, true, true, x) => w!(out, "{:<-#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Left)), Minus, true, true, X) => w!(out, "{:<-#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Left)), Minus, true, true, b) => w!(out, "{:<-#0wi$.pr$b}", v.binary),
-                (Some((None, Left)), Minus, true, true, o) => w!(out, "{:<-#0wi$.pr$o}", v.octal),
-                (Some((None, Left)), Minus, true, true, e) => w!(out, "{:<-#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Left)), Minus, true, true, E) => w!(out, "{:<-#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Left)), Minus, true, true, p) => w!(out, "{:<-#0wi$.pr$p}", v.pointer),
-                (Some((None, Center)), No, true, false, Display) => w!(out, "{:^#wi$.pr$}", v.display),
-                (Some((None, Center)), No, true, false, Question) => w!(out, "{:^#wi$.pr$?}", v.debug),
-                (Some((None, Center)), No, true, false, xQuestion) => w!(out, "{:^#wi$.pr$x?}", v.debug),
-                (Some((None, Center)), No, true, false, XQuestion) => w!(out, "{:^#wi$.pr$X?}", v.debug),
-                (Some((None, Center)), No, true, false, x) => w!(out, "{:^#wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), No, true, false, X) => w!(out, "{:^#wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), No, true, false, b) => w!(out, "{:^#wi$.pr$b}", v.binary),
-                (Some((None, Center)), No, true, false, o) => w!(out, "{:^#wi$.pr$o}", v.octal),
-                (Some((None, Center)), No, true, false, e) => w!(out, "{:^#wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), No, true, false, E) => w!(out, "{:^#wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), No, true, false, p) => w!(out, "{:^#wi$.pr$p}", v.pointer),
-                (Some((None, Center)), No, true, true, Display) => w!(out, "{:^#0wi$.pr$}", v.display),
-                (Some((None, Center)), No, true, true, Question) => w!(out, "{:^#0wi$.pr$?}", v.debug),
-                (Some((None, Center)), No, true, true, xQuestion) => w!(out, "{:^#0wi$.pr$x?}", v.debug),
-                (Some((None, Center)), No, true, true, XQuestion) => w!(out, "{:^#0wi$.pr$X?}", v.debug),
-                (Some((None, Center)), No, true, true, x) => w!(out, "{:^#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), No, true, true, X) => w!(out, "{:^#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), No, true, true, b) => w!(out, "{:^#0wi$.pr$b}", v.binary),
-                (Some((None, Center)), No, true, true, o) => w!(out, "{:^#0wi$.pr$o}", v.octal),
-                (Some((None, Center)), No, true, true, e) => w!(out, "{:^#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), No, true, true, E) => w!(out, "{:^#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), No, true, true, p) => w!(out, "{:^#0wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Plus, true, false, Display) => w!(out, "{:^+#wi$.pr$}", v.display),
-                (Some((None, Center)), Plus, true, false, Question) => w!(out, "{:^+#wi$.pr$?}", v.debug),
-                (Some((None, Center)), Plus, true, false, xQuestion) => w!(out, "{:^+#wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Plus, true, false, XQuestion) => w!(out, "{:^+#wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Plus, true, false, x) => w!(out, "{:^+#wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Plus, true, false, X) => w!(out, "{:^+#wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Plus, true, false, b) => w!(out, "{:^+#wi$.pr$b}", v.binary),
-                (Some((None, Center)), Plus, true, false, o) => w!(out, "{:^+#wi$.pr$o}", v.octal),
-                (Some((None, Center)), Plus, true, false, e) => w!(out, "{:^+#wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Plus, true, false, E) => w!(out, "{:^+#wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Plus, true, false, p) => w!(out, "{:^+#wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Plus, true, true, Display) => w!(out, "{:^+#0wi$.pr$}", v.display),
-                (Some((None, Center)), Plus, true, true, Question) => w!(out, "{:^+#0wi$.pr$?}", v.debug),
-                (Some((None, Center)), Plus, true, true, xQuestion) => w!(out, "{:^+#0wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Plus, true, true, XQuestion) => w!(out, "{:^+#0wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Plus, true, true, x) => w!(out, "{:^+#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Plus, true, true, X) => w!(out, "{:^+#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Plus, true, true, b) => w!(out, "{:^+#0wi$.pr$b}", v.binary),
-                (Some((None, Center)), Plus, true, true, o) => w!(out, "{:^+#0wi$.pr$o}", v.octal),
-                (Some((None, Center)), Plus, true, true, e) => w!(out, "{:^+#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Plus, true, true, E) => w!(out, "{:^+#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Plus, true, true, p) => w!(out, "{:^+#0wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Minus, true, false, Display) => w!(out, "{:^-#wi$.pr$}", v.display),
-                (Some((None, Center)), Minus, true, false, Question) => w!(out, "{:^-#wi$.pr$?}", v.debug),
-                (Some((None, Center)), Minus, true, false, xQuestion) => w!(out, "{:^-#wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Minus, true, false, XQuestion) => w!(out, "{:^-#wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Minus, true, false, x) => w!(out, "{:^-#wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Minus, true, false, X) => w!(out, "{:^-#wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Minus, true, false, b) => w!(out, "{:^-#wi$.pr$b}", v.binary),
-                (Some((None, Center)), Minus, true, false, o) => w!(out, "{:^-#wi$.pr$o}", v.octal),
-                (Some((None, Center)), Minus, true, false, e) => w!(out, "{:^-#wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Minus, true, false, E) => w!(out, "{:^-#wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Minus, true, false, p) => w!(out, "{:^-#wi$.pr$p}", v.pointer),
-                (Some((None, Center)), Minus, true, true, Display) => w!(out, "{:^-#0wi$.pr$}", v.display),
-                (Some((None, Center)), Minus, true, true, Question) => w!(out, "{:^-#0wi$.pr$?}", v.debug),
-                (Some((None, Center)), Minus, true, true, xQuestion) => w!(out, "{:^-#0wi$.pr$x?}", v.debug),
-                (Some((None, Center)), Minus, true, true, XQuestion) => w!(out, "{:^-#0wi$.pr$X?}", v.debug),
-                (Some((None, Center)), Minus, true, true, x) => w!(out, "{:^-#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Center)), Minus, true, true, X) => w!(out, "{:^-#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Center)), Minus, true, true, b) => w!(out, "{:^-#0wi$.pr$b}", v.binary),
-                (Some((None, Center)), Minus, true, true, o) => w!(out, "{:^-#0wi$.pr$o}", v.octal),
-                (Some((None, Center)), Minus, true, true, e) => w!(out, "{:^-#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Center)), Minus, true, true, E) => w!(out, "{:^-#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Center)), Minus, true, true, p) => w!(out, "{:^-#0wi$.pr$p}", v.pointer),
-                (Some((None, Right)), No, true, false, Display) => w!(out, "{:>#wi$.pr$}", v.display),
-                (Some((None, Right)), No, true, false, Question) => w!(out, "{:>#wi$.pr$?}", v.debug),
-                (Some((None, Right)), No, true, false, xQuestion) => w!(out, "{:>#wi$.pr$x?}", v.debug),
-                (Some((None, Right)), No, true, false, XQuestion) => w!(out, "{:>#wi$.pr$X?}", v.debug),
-                (Some((None, Right)), No, true, false, x) => w!(out, "{:>#wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), No, true, false, X) => w!(out, "{:>#wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), No, true, false, b) => w!(out, "{:>#wi$.pr$b}", v.binary),
-                (Some((None, Right)), No, true, false, o) => w!(out, "{:>#wi$.pr$o}", v.octal),
-                (Some((None, Right)), No, true, false, e) => w!(out, "{:>#wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), No, true, false, E) => w!(out, "{:>#wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), No, true, false, p) => w!(out, "{:>#wi$.pr$p}", v.pointer),
-                (Some((None, Right)), No, true, true, Display) => w!(out, "{:>#0wi$.pr$}", v.display),
-                (Some((None, Right)), No, true, true, Question) => w!(out, "{:>#0wi$.pr$?}", v.debug),
-                (Some((None, Right)), No, true, true, xQuestion) => w!(out, "{:>#0wi$.pr$x?}", v.debug),
-                (Some((None, Right)), No, true, true, XQuestion) => w!(out, "{:>#0wi$.pr$X?}", v.debug),
-                (Some((None, Right)), No, true, true, x) => w!(out, "{:>#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), No, true, true, X) => w!(out, "{:>#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), No, true, true, b) => w!(out, "{:>#0wi$.pr$b}", v.binary),
-                (Some((None, Right)), No, true, true, o) => w!(out, "{:>#0wi$.pr$o}", v.octal),
-                (Some((None, Right)), No, true, true, e) => w!(out, "{:>#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), No, true, true, E) => w!(out, "{:>#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), No, true, true, p) => w!(out, "{:>#0wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Plus, true, false, Display) => w!(out, "{:>+#wi$.pr$}", v.display),
-                (Some((None, Right)), Plus, true, false, Question) => w!(out, "{:>+#wi$.pr$?}", v.debug),
-                (Some((None, Right)), Plus, true, false, xQuestion) => w!(out, "{:>+#wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Plus, true, false, XQuestion) => w!(out, "{:>+#wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Plus, true, false, x) => w!(out, "{:>+#wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Plus, true, false, X) => w!(out, "{:>+#wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Plus, true, false, b) => w!(out, "{:>+#wi$.pr$b}", v.binary),
-                (Some((None, Right)), Plus, true, false, o) => w!(out, "{:>+#wi$.pr$o}", v.octal),
-                (Some((None, Right)), Plus, true, false, e) => w!(out, "{:>+#wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Plus, true, false, E) => w!(out, "{:>+#wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Plus, true, false, p) => w!(out, "{:>+#wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Plus, true, true, Display) => w!(out, "{:>+#0wi$.pr$}", v.display),
-                (Some((None, Right)), Plus, true, true, Question) => w!(out, "{:>+#0wi$.pr$?}", v.debug),
-                (Some((None, Right)), Plus, true, true, xQuestion) => w!(out, "{:>+#0wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Plus, true, true, XQuestion) => w!(out, "{:>+#0wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Plus, true, true, x) => w!(out, "{:>+#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Plus, true, true, X) => w!(out, "{:>+#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Plus, true, true, b) => w!(out, "{:>+#0wi$.pr$b}", v.binary),
-                (Some((None, Right)), Plus, true, true, o) => w!(out, "{:>+#0wi$.pr$o}", v.octal),
-                (Some((None, Right)), Plus, true, true, e) => w!(out, "{:>+#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Plus, true, true, E) => w!(out, "{:>+#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Plus, true, true, p) => w!(out, "{:>+#0wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Minus, true, false, Display) => w!(out, "{:>-#wi$.pr$}", v.display),
-                (Some((None, Right)), Minus, true, false, Question) => w!(out, "{:>-#wi$.pr$?}", v.debug),
-                (Some((None, Right)), Minus, true, false, xQuestion) => w!(out, "{:>-#wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Minus, true, false, XQuestion) => w!(out, "{:>-#wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Minus, true, false, x) => w!(out, "{:>-#wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Minus, true, false, X) => w!(out, "{:>-#wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Minus, true, false, b) => w!(out, "{:>-#wi$.pr$b}", v.binary),
-                (Some((None, Right)), Minus, true, false, o) => w!(out, "{:>-#wi$.pr$o}", v.octal),
-                (Some((None, Right)), Minus, true, false, e) => w!(out, "{:>-#wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Minus, true, false, E) => w!(out, "{:>-#wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Minus, true, false, p) => w!(out, "{:>-#wi$.pr$p}", v.pointer),
-                (Some((None, Right)), Minus, true, true, Display) => w!(out, "{:>-#0wi$.pr$}", v.display),
-                (Some((None, Right)), Minus, true, true, Question) => w!(out, "{:>-#0wi$.pr$?}", v.debug),
-                (Some((None, Right)), Minus, true, true, xQuestion) => w!(out, "{:>-#0wi$.pr$x?}", v.debug),
-                (Some((None, Right)), Minus, true, true, XQuestion) => w!(out, "{:>-#0wi$.pr$X?}", v.debug),
-                (Some((None, Right)), Minus, true, true, x) => w!(out, "{:>-#0wi$.pr$x}", v.lower_hex),
-                (Some((None, Right)), Minus, true, true, X) => w!(out, "{:>-#0wi$.pr$X}", v.upper_hex),
-                (Some((None, Right)), Minus, true, true, b) => w!(out, "{:>-#0wi$.pr$b}", v.binary),
-                (Some((None, Right)), Minus, true, true, o) => w!(out, "{:>-#0wi$.pr$o}", v.octal),
-                (Some((None, Right)), Minus, true, true, e) => w!(out, "{:>-#0wi$.pr$e}", v.lower_exp),
-                (Some((None, Right)), Minus, true, true, E) => w!(out, "{:>-#0wi$.pr$E}", v.upper_exp),
-                (Some((None, Right)), Minus, true, true, p) => w!(out, "{:>-#0wi$.pr$p}", v.pointer),
-                (Some((Some(_), _)), ..) => todo!(),
-            };
+            let value = context.get(ident)?;
+            if fill.is_some() {
+                unimplemented!("fill is not supported");
+                // let mut tmp = String::new();
+                // format_value(
+                //     &mut tmp, value, 0, precision, alignment, sign, hash,
+                // zero, trait_, )?;
+                // if tmp.len() < width {
+                //     let fill = &fill.to_string();
+                //     let width = width - tmp.len();
+                //     if alignment == Alignment::Right {
+                //         out.push_str(&fill.repeat(width))
+                //     }
+                //     if alignment == Alignment::Center {
+                //         out.push_str(&fill.repeat(width / 2))
+                //     }
+                //     out.push_str(&tmp);
+                //     if alignment == Alignment::Center {
+                //         out.push_str(&fill.repeat(width - width / 2))
+                //     }
+                //     if alignment == Alignment::Left {
+                //         out.push_str(&fill.repeat(width))
+                //     }
+                // } else {
+                //     out.push_str(&tmp);
+                // }
+            } else {
+                format_value(
+                    &mut out, value, width, precision, alignment, sign, hash, zero, trait_,
+                )?;
+            }
             ensure!(format.starts_with('}'));
             step(1, format);
             continue;
@@ -814,6 +331,27 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
 
 #[test]
 fn test_format() {
+    let p = &42;
+    assert_eq!(
+        format!("{:#p}", p),
+        format!("{:#p}", Formattable::pointer(&p).pointer.unwrap())
+    );
+    assert_eq!(
+        format(
+            "{ident:#p}",
+            [("ident", Formattable::pointer(&p))].into_iter().collect(),
+        )
+        .unwrap(),
+        format!("{ident:#p}", ident = p)
+    );
+    // assert_eq!(
+    //     format(
+    //         "{ident:a>+09.15}",
+    //         [("ident", Formattable::from(&"hi"))].into_iter().collect(),
+    //     )
+    //     .unwrap(),
+    //     format!("{ident:a>+09.15}", ident = "hi")
+    // );
     assert_eq!(
         format("{{hello}}", HashMap::<String, Formattable>::new()).unwrap(),
         "{hello}"
@@ -821,10 +359,9 @@ fn test_format() {
     assert_eq!(
         format(
             "{hi:10} {hi:?} {int:#x?} {int:b} {int:#X} {int:4o} {display} {display:5} {display:05}",
-            // "{int:#x?}",
             [
                 ("hi", Formattable::debug_display(&"hello")),
-                ("int", Formattable::number(&123u8)),
+                ("int", Formattable::integer(&123u8)),
                 ("display", (&10).into())
             ]
             .into_iter()
