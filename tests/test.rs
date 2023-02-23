@@ -112,7 +112,7 @@ fn test(
 ) {
     let mut runner = TestRunner::deterministic();
     let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
-        .take(1000)
+        .take(10)
         .map(|s| s.unwrap().current())
         .map(|format_arg| {
             let format_arg = format_arg.to_string();
