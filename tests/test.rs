@@ -3,6 +3,7 @@ use std::fmt::Display;
 use derive_more::Display;
 use proptest::option;
 use proptest::prelude::*;
+use proptest::sample::select;
 use proptest_derive::Arbitrary;
 
 #[derive(Debug, Arbitrary, Display, Clone)]
@@ -49,10 +50,13 @@ enum Sign {
 }
 
 #[derive(Default, Debug, Arbitrary)]
+#[proptest(params = "&'static [Trait]")]
 struct FormatArgument {
     #[proptest(regex = "ident")]
     ident: String,
-    #[proptest(strategy = "Just(None)")]
+    // NOTE: fill is not supported for now
+    // #[proptest(strategy = "option::of((any::<Option<char>>(), any::<Alignment>()))")]
+    #[proptest(strategy = "option::of((Just(None), any::<Alignment>()))")]
     alignment: Option<(Option<char>, Alignment)>,
     sign: Sign,
     hash: bool,
@@ -61,7 +65,7 @@ struct FormatArgument {
     width: Option<usize>,
     #[proptest(strategy = "option::of(0usize..20)")]
     precision: Option<usize>,
-    #[proptest(strategy = "Just(Trait::Display)")]
+    #[proptest(strategy = "select(params)")]
     trait_: Trait,
 }
 
@@ -79,7 +83,12 @@ impl Display for FormatArgument {
         } = self;
         let alignment = alignment
             .as_ref()
-            .map(|(fill, alignment)| format!("{}{alignment}", fill.unwrap_or_default()))
+            .map(|(fill, alignment)| {
+                format!(
+                    "{}{alignment}",
+                    fill.map(|c| c.to_string()).unwrap_or_default()
+                )
+            })
             .unwrap_or_default();
         let hash = if *hash { "#" } else { "" };
         let zero = if *zero { "0" } else { "" };
@@ -94,14 +103,79 @@ impl Display for FormatArgument {
 
 proptest! {
     #[test]
-    fn display(format_arg in any::<FormatArgument>()) {
+    fn string(format_arg in FormatArgument::arbitrary_with(&[Trait::Display, Trait::Question, Trait::XQuestion, Trait::xQuestion])) {
         let t = trybuild2::TestCases::new();
+        let format_arg = format_arg.to_string();
+        let format_arg = format_arg.escape_default();
         t.pass_inline("display", &format!{r#"
-            use template::format;
+            use template::{{format, Formattable}};
             fn main() {{
                 assert_eq!(
                     format("{format_arg}", [("ident", (&"test").into())].into_iter().collect()).unwrap(),
-                    format!("{format_arg}", ident = "test")
+                    format!("{format_arg}", ident = "test"),
+                    "{{}}", "{format_arg}"
+                );
+                assert_eq!(
+                    format("{format_arg}", [("ident", Formattable::debug_display(&"test").into())].into_iter().collect()).unwrap(),
+                    format!("{format_arg}", ident = "test"),
+                    "{{}}", "{format_arg}"
+                );
+            }}
+        "#});
+    }
+
+    #[test]
+    fn integer(format_arg in FormatArgument::arbitrary_with(&[
+            Trait::Display, Trait::Question, Trait::XQuestion, Trait::xQuestion,
+            Trait::x, Trait::X, Trait::b, Trait::o, Trait::e, Trait::E
+    ])) {
+        let t = trybuild2::TestCases::new();
+        let format_arg = format_arg.to_string();
+        let format_arg = format_arg.escape_default();
+        t.pass_inline("integer", &format!{r#"
+            use template::{{format, Formattable}};
+            fn main() {{
+                assert_eq!(
+                    format("{format_arg}", [("ident", Formattable::integer(&10))].into_iter().collect()).unwrap(),
+                    format!("{format_arg}", ident = 10),
+                    "{{}}", "{format_arg}"
+                );
+            }}
+        "#});
+    }
+
+    #[test]
+    fn float(format_arg in FormatArgument::arbitrary_with(&[
+            Trait::Display, Trait::Question, Trait::XQuestion, Trait::xQuestion, Trait::e, Trait::E
+    ])) {
+        let t = trybuild2::TestCases::new();
+        let format_arg = format_arg.to_string();
+        let format_arg = format_arg.escape_default();
+        t.pass_inline("float", &format!{r#"
+            use template::{{format, Formattable}};
+            fn main() {{
+                assert_eq!(
+                    format("{format_arg}", [("ident", Formattable::float(&3.14))].into_iter().collect()).unwrap(),
+                    format!("{format_arg}", ident = 3.14),
+                    "{{}}", "{format_arg}"
+                );
+            }}
+        "#});
+    }
+
+    #[test]
+    fn pointer(format_arg in FormatArgument::arbitrary_with(&[Trait::p])) {
+        let t = trybuild2::TestCases::new();
+        let format_arg = format_arg.to_string();
+        let format_arg = format_arg.escape_default();
+        t.pass_inline("pointer", &format!{r#"
+            use template::{{format, Formattable}};
+            fn main() {{
+                let p = &42;
+                assert_eq!(
+                    format("{format_arg}", [("ident", Formattable::pointer(&p))].into_iter().collect()).unwrap(),
+                    format!("{format_arg}", ident = p),
+                    "{{}}", "{format_arg}"
                 );
             }}
         "#});
