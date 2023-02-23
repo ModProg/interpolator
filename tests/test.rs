@@ -9,6 +9,7 @@ use proptest::sample::select;
 use proptest::strategy::ValueTree;
 use proptest::test_runner::TestRunner;
 use proptest_derive::Arbitrary;
+use quote::{quote, ToTokens};
 
 #[derive(Debug, Arbitrary, Display, Clone)]
 #[allow(non_camel_case_types)]
@@ -106,27 +107,28 @@ impl Display for FormatArgument {
 }
 
 fn test(
-    value: impl Display,
+    value: impl ToTokens,
     converter: impl Display,
     strategy: impl Strategy<Value = FormatArgument>,
 ) {
-    #[cfg(not(target_os = "windows"))]
+    // #[cfg(not(target_os = "windows"))]
     const TEST_COUNT: usize = 1000;
-    #[cfg(target_os = "windows")]
-    const TEST_COUNT: usize = 100;
+    // #[cfg(target_os = "windows")]
+    // const TEST_COUNT: usize = 100;
     let mut runner = TestRunner::deterministic();
     let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
         .take(TEST_COUNT)
         .map(|s| s.unwrap().current())
         .map(|format_arg| {
             let format_arg = format_arg.to_string();
-            let format_arg = format_arg.escape_default();
-            format!(r#"
+            quote! {
                 // assert_eq!(
                 //     format("{format_arg}", [("ident", Formattable::{converter}(&{value}))].into_iter().collect()).unwrap(),
-                    format!("{format_arg}", ident = {value});
+                    format!(#format_arg, ident = #value);
                 //     "{{}}", "{format_arg}"
-                // );"#)
+                // )
+            }
+            .to_string()
         })
         .collect();
     let values = values.join("\n");
@@ -190,7 +192,7 @@ fn float() {
 #[test]
 fn pointer() {
     test(
-        "&42",
+        quote!(&42),
         "pointer",
         FormatArgument::arbitrary_with(&[Trait::p]),
     );
