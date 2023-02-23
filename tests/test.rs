@@ -9,6 +9,7 @@ use proptest::sample::select;
 use proptest::strategy::ValueTree;
 use proptest::test_runner::TestRunner;
 use proptest_derive::Arbitrary;
+use quote::{quote, ToTokens};
 
 #[derive(Debug, Arbitrary, Display, Clone)]
 #[allow(non_camel_case_types)]
@@ -106,40 +107,39 @@ impl Display for FormatArgument {
 }
 
 fn test(
-    value: impl Display,
-    converter: impl Display,
+    value: impl ToTokens,
+    converter: impl ToTokens,
     strategy: impl Strategy<Value = FormatArgument>,
 ) {
     let mut runner = TestRunner::deterministic();
-    let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
-        .take(100)
-        .map(|s| s.unwrap().current())
-        .map(|format_arg| {
-            let format_arg = format_arg.to_string();
-            let format_arg = format_arg.escape_default();
-            format!(r#"
-                assert_eq!(
-                    format("{format_arg}", [("ident", Formattable::{converter}(&{value}))].into_iter().collect()).unwrap(),
-                    format!("{format_arg}", ident = {value}),
-                    "{{}}", "{format_arg}"
-                );"#)
-        })
-        .collect();
-    let values = values.join("\n");
+    let format_args = iter::repeat_with(|| strategy.new_tree(&mut runner))
+        .take(1000)
+        .map(|s| s.unwrap().current().to_string());
     let t = trybuild2::TestCases::new();
-    t.pass_inline(&converter.to_string(), &format! {r#"
-        use template::{{format, Formattable}};
-        fn main() {{
-            {values}
-        }}
-    "#});
+    t.pass_inline(
+        &converter.to_token_stream().to_string(),
+        &quote! {
+            use template::{{format, Formattable}};
+            use std::thread;
+            fn main() {
+                thread::spawn(move ||{
+                    let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
+                    #(assert!(
+                            format(#format_args, value).unwrap() ==  format!(#format_args, ident = #value),
+                            "{}", #format_args
+                    );)*
+                }).join().unwrap();
+            }
+        }
+        .to_string(),
+    );
 }
 
 #[test]
 fn string() {
     test(
         "\"test\"",
-        "debug_display",
+        quote!(debug_display),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
             Trait::Question,
@@ -153,7 +153,7 @@ fn string() {
 fn integer() {
     test(
         42,
-        "integer",
+        quote!(integer),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
             Trait::Question,
@@ -172,7 +172,7 @@ fn integer() {
 fn float() {
     test(
         PI,
-        "float",
+        quote!(float),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
             Trait::Question,
@@ -186,8 +186,8 @@ fn float() {
 #[test]
 fn pointer() {
     test(
-        "&42",
-        "pointer",
+        quote!(&42),
+        quote!(pointer),
         FormatArgument::arbitrary_with(&[Trait::p]),
     );
 }
