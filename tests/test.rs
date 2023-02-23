@@ -108,7 +108,7 @@ impl Display for FormatArgument {
 
 fn test(
     value: impl ToTokens,
-    converter: impl Display,
+    converter: impl ToTokens,
     strategy: impl Strategy<Value = FormatArgument>,
 ) {
     // #[cfg(not(target_os = "windows"))]
@@ -123,17 +123,17 @@ fn test(
             let format_arg = format_arg.to_string();
             quote! {
                 // assert_eq!(
-                //     format("{format_arg}", [("ident", Formattable::{converter}(&{value}))].into_iter().collect()).unwrap(),
-                    format!(#format_arg, ident = #value);
-                //     "{{}}", "{format_arg}"
-                // )
+                format(#format_arg, [("ident", Formattable::#converter(&{value}))].into_iter().collect()).unwrap();
+                //     format!(#format_arg, ident = #value);
+                // //     "{{}}", "{format_arg}"
+                // // )
             }
             .to_string()
         })
         .collect();
     let values = values.join("\n");
     let t = trybuild2::TestCases::new();
-    t.pass_inline(&converter.to_string(), &format! {r#"
+    t.pass_inline(&converter.to_token_stream().to_string(), &format! {r#"
         use template::{{format, Formattable}};
         fn main() {{
             {values}
@@ -145,7 +145,7 @@ fn test(
 fn string() {
     test(
         "\"test\"",
-        "debug_display",
+        quote!(debug_display),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
             Trait::Question,
@@ -159,7 +159,7 @@ fn string() {
 fn integer() {
     test(
         42,
-        "integer",
+        quote!(integer),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
             Trait::Question,
@@ -178,7 +178,7 @@ fn integer() {
 fn float() {
     test(
         PI,
-        "float",
+        quote!(float),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
             Trait::Question,
@@ -193,7 +193,7 @@ fn float() {
 fn pointer() {
     test(
         quote!(&42),
-        "pointer",
+        quote!(pointer),
         FormatArgument::arbitrary_with(&[Trait::p]),
     );
 }
