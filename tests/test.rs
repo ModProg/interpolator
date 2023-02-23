@@ -110,7 +110,7 @@ fn test(
     converter: impl Display,
     strategy: impl Strategy<Value = FormatArgument>,
 ) {
-    let mut runner = TestRunner::default();
+    let mut runner = TestRunner::deterministic();
     let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
         .take(1000)
         .map(|s| s.unwrap().current())
