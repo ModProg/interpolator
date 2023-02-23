@@ -283,7 +283,7 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
                 width,
                 precision,
                 trait_,
-            } = FormatArgument::from_str(format)?;
+            } = dbg!(FormatArgument::from_str(format)?);
             let value = context.get(ident)?;
             if fill.is_some() {
                 unimplemented!("fill is not supported");
