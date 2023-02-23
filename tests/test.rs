@@ -116,7 +116,7 @@ fn test(
     const TEST_COUNT: usize = 100;
     let mut runner = TestRunner::deterministic();
     let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
-        .take(1000)
+        .take(TEST_COUNT)
         .map(|s| s.unwrap().current())
         .map(|format_arg| {
             let format_arg = format_arg.to_string();
