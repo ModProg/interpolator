@@ -110,9 +110,13 @@ fn test(
     converter: impl Display,
     strategy: impl Strategy<Value = FormatArgument>,
 ) {
+    #[cfg(not(target_os = "windows"))]
+    const TEST_COUNT: usize = 1000;
+    #[cfg(target_os = "windows")]
+    const TEST_COUNT: usize = 100;
     let mut runner = TestRunner::deterministic();
     let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
-        .take(100)
+        .take(1000)
         .map(|s| s.unwrap().current())
         .map(|format_arg| {
             let format_arg = format_arg.to_string();
