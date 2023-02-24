@@ -124,13 +124,9 @@ fn test(
             quote! {
                 // {
                 // drop(assert_eq!(
-                let e = || {
-                // {
-                    let a = format(#format_arg, [("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap();
-                    drop(a);
-                // }
-                };
-                e();
+                // (|| {
+                    format(#format_arg, vec![("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap();
+                // })();
                 //     format!(#format_arg, ident = #value),
                 //     "{}", #format_arg
                 // ));
