@@ -111,32 +111,10 @@ fn test(
     converter: impl ToTokens,
     strategy: impl Strategy<Value = FormatArgument>,
 ) {
-    // #[cfg(not(target_os = "windows"))]
-    const TEST_COUNT: usize = 1000;
-    // #[cfg(target_os = "windows")]
-    // const TEST_COUNT: usize = 100;
     let mut runner = TestRunner::deterministic();
     let format_args = iter::repeat_with(|| strategy.new_tree(&mut runner))
-        .take(TEST_COUNT)
-        .map(|s| s.unwrap().current().to_string())
-        // .map(|format_arg| {
-        //     let format_arg = format_arg.to_string();
-        //     quote! {
-        //         // {
-        //         // drop(assert_eq!(
-        //         // (|| {
-        //             format(#format_arg, vec![("ident",
-        // Formattable::#converter(&#value))].into_iter().collect()).unwrap();         //
-        // })();         //     format!(#format_arg, ident = #value),
-        //         //     "{}", #format_arg
-        //         // ));
-        //         // }
-        //     }
-        //     .to_string()
-        // })
-        // .collect();
-        ;
-    // let values = values.join("\n");
+        .take(1000)
+        .map(|s| s.unwrap().current().to_string());
     let t = trybuild2::TestCases::new();
     t.pass_inline(
         &converter.to_token_stream().to_string(),
