@@ -261,7 +261,7 @@ impl<'a> FormatArgument<'a> {
 
 pub fn format<K: Borrow<str> + Eq + Hash>(
     mut format: &str,
-    context: HashMap<K, Formattable>,
+    context: &HashMap<K, Formattable>,
 ) -> Option<String> {
     let format = &mut format;
     let mut out = String::with_capacity(format.len());
@@ -339,7 +339,7 @@ fn test_format() {
     assert_eq!(
         format(
             "{ident:#p}",
-            [("ident", Formattable::pointer(&p))].into_iter().collect(),
+            &[("ident", Formattable::pointer(&p))].into_iter().collect(),
         )
         .unwrap(),
         format!("{ident:#p}", ident = p)
@@ -353,13 +353,13 @@ fn test_format() {
     //     format!("{ident:a>+09.15}", ident = "hi")
     // );
     assert_eq!(
-        format("{{hello}}", HashMap::<String, Formattable>::new()).unwrap(),
+        format("{{hello}}", &HashMap::<String, Formattable>::new()).unwrap(),
         "{hello}"
     );
     assert_eq!(
         format(
             "{hi:10} {hi:?} {int:#x?} {int:b} {int:#X} {int:4o} {display} {display:5} {display:05}",
-            [
+            &[
                 ("hi", Formattable::debug_display(&"hello")),
                 ("int", Formattable::integer(&123u8)),
                 ("display", (&10).into())
