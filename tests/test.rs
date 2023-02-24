@@ -144,7 +144,11 @@ fn test(
             use template::{{format, Formattable}};
             fn main() {
                 let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
-                #(format(#format_args, value);)*
+                #(assert_eq!(
+                    format(#format_args, value).unwrap(),
+                    format!(#format_args, ident = #value),
+                    "{}", #format_args
+                );)*
             }
         }
         .to_string(),
