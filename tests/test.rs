@@ -123,7 +123,10 @@ fn test(
             let format_arg = format_arg.to_string();
             quote! {
                 // assert_eq!(
-                format(#format_arg, [("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap();
+                let e = || {
+                    format(#format_arg, [("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap();
+                };
+                e();
                 //     format!(#format_arg, ident = #value);
                 // //     "{{}}", "{format_arg}"
                 // // )
