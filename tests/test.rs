@@ -129,7 +129,7 @@ fn test(
                 // };
                 // e();
                     format!(#format_arg, ident = #value),
-                    "{{}}", "{format_arg}"
+                    "{}", #format_arg
                 ));
                 }
             }
