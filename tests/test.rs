@@ -116,33 +116,39 @@ fn test(
     // #[cfg(target_os = "windows")]
     // const TEST_COUNT: usize = 100;
     let mut runner = TestRunner::deterministic();
-    let values: Vec<_> = iter::repeat_with(|| strategy.new_tree(&mut runner))
+    let format_args = iter::repeat_with(|| strategy.new_tree(&mut runner))
         .take(TEST_COUNT)
-        .map(|s| s.unwrap().current())
-        .map(|format_arg| {
-            let format_arg = format_arg.to_string();
-            quote! {
-                // {
-                // drop(assert_eq!(
-                // (|| {
-                    format(#format_arg, vec![("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap();
-                // })();
-                //     format!(#format_arg, ident = #value),
-                //     "{}", #format_arg
-                // ));
-                // }
-            }
-            .to_string()
-        })
-        .collect();
-    let values = values.join("\n");
+        .map(|s| s.unwrap().current().to_string())
+        // .map(|format_arg| {
+        //     let format_arg = format_arg.to_string();
+        //     quote! {
+        //         // {
+        //         // drop(assert_eq!(
+        //         // (|| {
+        //             format(#format_arg, vec![("ident",
+        // Formattable::#converter(&#value))].into_iter().collect()).unwrap();         //
+        // })();         //     format!(#format_arg, ident = #value),
+        //         //     "{}", #format_arg
+        //         // ));
+        //         // }
+        //     }
+        //     .to_string()
+        // })
+        // .collect();
+        ;
+    // let values = values.join("\n");
     let t = trybuild2::TestCases::new();
-    t.pass_inline(&converter.to_token_stream().to_string(), &format! {r#"
-        use template::{{format, Formattable}};
-        fn main() {{
-            {values}
-        }}
-    "#});
+    t.pass_inline(
+        &converter.to_token_stream().to_string(),
+        &quote! {
+            use template::{{format, Formattable}};
+            fn main() {
+                let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
+                #(format(#format_args, value);)*
+            }
+        }
+        .to_string(),
+    );
 }
 
 #[test]
