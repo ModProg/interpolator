@@ -122,14 +122,16 @@ fn test(
         .map(|format_arg| {
             let format_arg = format_arg.to_string();
             quote! {
-                // assert_eq!(
-                let e = || {
-                    format(#format_arg, [("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap();
-                };
-                e();
-                //     format!(#format_arg, ident = #value);
-                // //     "{{}}", "{format_arg}"
-                // // )
+                {
+                drop(assert_eq!(
+                // let e = || {
+                    format(#format_arg, [("ident", Formattable::#converter(&#value))].into_iter().collect()).unwrap(),
+                // };
+                // e();
+                    format!(#format_arg, ident = #value),
+                    "{{}}", "{format_arg}"
+                ));
+                }
             }
             .to_string()
         })
