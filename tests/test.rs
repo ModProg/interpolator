@@ -142,12 +142,15 @@ fn test(
         &converter.to_token_stream().to_string(),
         &quote! {
             use template::{{format, Formattable}};
+            use std::thread;
             fn main() {
-                let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
-                #((||{assert!(
+                thread::spawn(move ||{
+                    let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
+                    #(assert!(
                             format(#format_args, value).unwrap() ==  format!(#format_args, ident = #value),
                             "{}", #format_args
-                )})();)*
+                    );)*
+                }).join().unwrap();
             }
         }
         .to_string(),
