@@ -140,14 +140,8 @@ fn test(
 #[test]
 fn string() {
     test(
-<<<<<<< HEAD
-        "test",
-||||||| parent of 71c8234 (test: add comment on thread)
-        "\"test\"",
-=======
         "test",
         #[cfg(feature = "debug")]
->>>>>>> 71c8234 (test: add comment on thread)
         quote!(debug_display),
         #[cfg(not(feature = "debug"))]
         quote!(display),

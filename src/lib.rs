@@ -1,79 +1,17 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
-<<<<<<< HEAD
-use std::error::Error as StdError;
-use std::fmt::{
-    Binary, Debug, Display, Error as FmtError, LowerExp, LowerHex, Octal, Pointer, UpperExp,
-    UpperHex,
-};
-||||||| parent of 71c8234 (test: add comment on thread)
-use std::fmt::{
-    Binary, Debug, Display, LowerExp, LowerHex, Octal, Pointer, UpperExp, UpperHex, Write,
-};
-=======
 use std::error::Error as StdError;
 #[cfg(feature = "pointer")]
 use std::fmt::Pointer;
 #[cfg(feature = "number")]
 use std::fmt::{Binary, LowerExp, LowerHex, Octal, UpperExp, UpperHex};
 use std::fmt::{Debug, Display, Error as FmtError};
->>>>>>> 71c8234 (test: add comment on thread)
 use std::hash::Hash;
 use std::num::ParseIntError;
 
 mod hard_coded;
 use hard_coded::format_value;
 
-<<<<<<< HEAD
-#[derive(Debug)]
-pub enum Error {
-    MissingTraitImpl(Trait, usize),
-    FmtError(FmtError, usize),
-    ParseError(FormatArgumentError),
-    MissingValue(String, usize),
-}
-
-impl From<FormatArgumentError> for Error {
-    fn from(value: FormatArgumentError) -> Self {
-        Self::ParseError(value)
-    }
-}
-
-#[derive(Debug)]
-pub enum Trait {
-    Binary,
-    Debug,
-    Display,
-    LowerExp,
-    LowerHex,
-    Octal,
-    Pointer,
-    UpperExp,
-    UpperHex,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::MissingTraitImpl(t, idx) => write!(
-                f,
-                "trait `{t:?}` not implemented, used by format argument at {idx}"
-            ),
-            Error::FmtError(e, idx) => write!(f, "error while formatting at {idx}: {e}"),
-            Error::ParseError(e) => write!(f, "error while parsing input: {e}"),
-            Error::MissingValue(ident, idx) => {
-                write!(f, "specified value not in context `{ident}` at {idx}")
-            }
-        }
-    }
-}
-
-impl StdError for Error {}
-
-pub type Result<T = (), E = Error> = std::result::Result<T, E>;
-||||||| parent of 71c8234 (test: add comment on thread)
-// type Result<T = (), E = ()> = std::result::Result<T, E>;
-=======
 #[derive(Debug)]
 pub enum Error {
     MissingTraitImpl(Trait, usize),
@@ -129,7 +67,6 @@ impl Display for Error {
 impl StdError for Error {}
 
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
->>>>>>> 71c8234 (test: add comment on thread)
 
 macro_rules! ensure {
     ($condition:expr, $error:expr) => {
@@ -174,92 +111,35 @@ macro_rules! formattable_fn {
             self
         }
     };
-<<<<<<< HEAD
-    ($name:ident, $builder:ident<$($traits:ident),*>) => {
-        formattable_fn!($name, $builder<$($traits),*> $name);
-    };
-    ($name:ident, $builder:ident, $getter:ident<$trait:ident>) => {
-        formattable_fn!($name, $builder<$trait> $name);
-        fn $getter(&self) -> Result<&dyn $trait, Trait> {
-            self.$name.ok_or(Trait::$trait)
-        }
-    };
-||||||| parent of 71c8234 (test: add comment on thread)
-    ($name:ident, $builder:ident<$($traits:ident),*>) => {
-        formattable_fn!($name, $builder<$($traits),*> $name);
-    }
-=======
     (($($feature:literal),*), $name:ident, $builder:ident, $getter:ident<$trait:ident>) => {
         formattable_fn!(($($feature),*), $name, $builder<$trait> $name);
         #[cfg(all($(feature = $feature),*))] fn $getter(&self) -> Result<&dyn $trait, Trait> {
             self.$name.ok_or(Trait::$trait)
         }
     };
->>>>>>> 71c8234 (test: add comment on thread)
 }
 macro_rules! formattable {
-<<<<<<< HEAD
-    [$($name:ident, $builder:ident$(, $getter:ident)?<$($traits:ident),*> $($fields:ident),*;)*] => {
-||||||| parent of 71c8234 (test: add comment on thread)
-    [$($name:ident, $builder:ident<$($traits:ident),*> $($fields:ident),*;)*] => {
-=======
     [$($cfg:tt, $name:ident, $builder:ident$(, $getter:ident)?<$($traits:ident),*> $($fields:ident),*;)*] => {
->>>>>>> 71c8234 (test: add comment on thread)
         impl<'a> Formattable<'a> {
-<<<<<<< HEAD
-            $(formattable_fn!($name, $builder$(, $getter)?<$($traits),*> $($fields),*);)*
-||||||| parent of 71c8234 (test: add comment on thread)
-            $(formattable_fn!($name, $builder<$($traits),*> $($fields),*);)*
-=======
             $(formattable_fn!($cfg, $name, $builder$(, $getter)?<$($traits),*> $($fields),*);)*
->>>>>>> 71c8234 (test: add comment on thread)
         }
     };
 }
 
 formattable![
-<<<<<<< HEAD
-    debug_display, and_debug_display<Debug, Display> debug, display;
-    debug, and_debug, get_debug<Debug>;
-    display, and_display, get_display<Display>;
-    integer, and_integer<Binary, Debug, Display, LowerExp, LowerHex, Octal, UpperExp, UpperHex>
-||||||| parent of 71c8234 (test: add comment on thread)
-    debug_display, and_debug_display<Debug, Display> debug, display;
-    debug, and_debug<Debug>;
-    display, and_display<Display>;
-    integer, and_integer<Binary, Debug, Display, LowerExp, LowerHex, Octal, UpperExp, UpperHex>
-=======
     ("debug"), debug_display, and_debug_display<Debug, Display> debug, display;
     ("debug"), debug, and_debug, get_debug<Debug>;
     (), display, and_display, get_display<Display>;
     ("number"), integer, and_integer<Binary, Debug, Display, LowerExp, LowerHex, Octal, UpperExp, UpperHex>
->>>>>>> 71c8234 (test: add comment on thread)
         binary, debug, display, lower_exp, lower_hex, octal, upper_exp, upper_hex;
     ("number"), float, and_float<Debug, Display, LowerExp, UpperExp>
         debug, display, lower_exp, upper_exp;
-<<<<<<< HEAD
-    binary, and_binary, get_binary<Binary>;
-    lower_exp, and_lower_exp, get_lower_exp<LowerExp>;
-    lower_hex, and_lower_hex, get_lower_hex<LowerHex>;
-    octal, and_octal, get_octal<Octal>;
-    upper_exp, and_upper_exp, get_upper_exp<UpperExp>;
-    upper_hex, and_upper_hex, get_upper_hex<UpperHex>;
-||||||| parent of 71c8234 (test: add comment on thread)
-    binary, and_binary<Binary>;
-    lower_exp, and_lower_exp<LowerExp>;
-    lower_hex, and_lower_hex<LowerHex>;
-    octal, and_octal<Octal>;
-    // pointer, and_pointer<Pointer>;
-    upper_exp, and_upper_exp<UpperExp>;
-    upper_hex, and_upper_hex<UpperHex>;
-=======
     ("number"), binary, and_binary, get_binary<Binary>;
     ("number"), lower_exp, and_lower_exp, get_lower_exp<LowerExp>;
     ("number"), lower_hex, and_lower_hex, get_lower_hex<LowerHex>;
     ("number"), octal, and_octal, get_octal<Octal>;
     ("number"), upper_exp, and_upper_exp, get_upper_exp<UpperExp>;
     ("number"), upper_hex, and_upper_hex, get_upper_hex<UpperHex>;
->>>>>>> 71c8234 (test: add comment on thread)
 ];
 
 #[cfg(feature = "pointer")]
@@ -349,42 +229,20 @@ enum TraitSpec {
     p,
 }
 
-<<<<<<< HEAD
-impl TraitSpec {
-    fn from_str(format: &mut &str, idx: &mut usize) -> Option<Self> {
-||||||| parent of 71c8234 (test: add comment on thread)
-impl Trait {
-    fn from_str(format: &mut &str) -> Option<Self> {
-=======
 impl TraitSpec {
     fn from_str(format: &mut &str, idx: &mut usize) -> Result<Self> {
         if format.starts_with('}') {
             return Ok(Self::Display);
         }
->>>>>>> 71c8234 (test: add comment on thread)
         match format.as_bytes()[0] {
-<<<<<<< HEAD
-            b'?' => Some(TraitSpec::Question),
-||||||| parent of 71c8234 (test: add comment on thread)
-            b'?' => Some(Trait::Question),
-=======
             #[cfg(feature = "debug")]
             b'?' => Ok(TraitSpec::Question),
             #[cfg(not(feature = "debug"))]
             b'?' => Err(Error::UnsupportedOption("?", "debug", *idx)),
             #[cfg(feature = "debug")]
->>>>>>> 71c8234 (test: add comment on thread)
             b'x' if format.as_bytes()[1] == b'?' => {
-<<<<<<< HEAD
-                step(1, format, idx);
-                Some(TraitSpec::xQuestion)
-||||||| parent of 71c8234 (test: add comment on thread)
-                step(1, format);
-                Some(Trait::xQuestion)
-=======
                 step(1, format, idx);
                 Ok(TraitSpec::xQuestion)
->>>>>>> 71c8234 (test: add comment on thread)
             }
             #[cfg(not(feature = "debug"))]
             b'x' if format.as_bytes()[1] == b'?' => {
@@ -392,36 +250,9 @@ impl TraitSpec {
             }
             #[cfg(feature = "debug")]
             b'X' if format.as_bytes()[1] == b'?' => {
-<<<<<<< HEAD
-                step(1, format, idx);
-                Some(TraitSpec::XQuestion)
-||||||| parent of 71c8234 (test: add comment on thread)
-                step(1, format);
-                Some(Trait::XQuestion)
-=======
                 step(1, format, idx);
                 Ok(TraitSpec::XQuestion)
->>>>>>> 71c8234 (test: add comment on thread)
             }
-<<<<<<< HEAD
-            b'o' => Some(TraitSpec::o),
-            b'x' => Some(TraitSpec::x),
-            b'X' => Some(TraitSpec::X),
-            b'p' => Some(TraitSpec::p),
-            b'b' => Some(TraitSpec::b),
-            b'e' => Some(TraitSpec::e),
-            b'E' => Some(TraitSpec::E),
-            _ => None,
-||||||| parent of 71c8234 (test: add comment on thread)
-            b'o' => Some(Trait::o),
-            b'x' => Some(Trait::x),
-            b'X' => Some(Trait::X),
-            b'p' => Some(Trait::p),
-            b'b' => Some(Trait::b),
-            b'e' => Some(Trait::e),
-            b'E' => Some(Trait::E),
-            _ => None,
-=======
             #[cfg(not(feature = "debug"))]
             b'X' if format.as_bytes()[1] == b'?' => {
                 Err(Error::UnsupportedOption("X?", "debug", *idx))
@@ -455,18 +286,11 @@ impl TraitSpec {
             #[cfg(not(feature = "pointer"))]
             b'p' => Err(Error::UnsupportedOption("p", "pointer", *idx)),
             _ => Err(FormatArgumentError::ExpectedBrace(*idx).into()),
->>>>>>> 71c8234 (test: add comment on thread)
         }
         .map(|m| {
             step(1, format, idx);
             m
         })
-<<<<<<< HEAD
-        .or_else(|| format.starts_with('}').then_some(TraitSpec::Display))
-||||||| parent of 71c8234 (test: add comment on thread)
-        .or_else(|| format.starts_with('}').then_some(Trait::Display))
-=======
->>>>>>> 71c8234 (test: add comment on thread)
     }
 }
 
@@ -520,15 +344,8 @@ impl Display for FormatArgumentError {
 impl StdError for FormatArgumentError {}
 
 impl<'a> FormatArgument<'a> {
-<<<<<<< HEAD
-    fn from_str(format: &mut &'a str, idx: &mut usize) -> Result<Self, FormatArgumentError> {
-        let start_index = *idx;
-||||||| parent of 71c8234 (test: add comment on thread)
-    fn from_str(format: &mut &'a str) -> Option<Self> {
-=======
     fn from_str(format: &mut &'a str, idx: &mut usize) -> Result<Self> {
         let start_index = *idx;
->>>>>>> 71c8234 (test: add comment on thread)
         let mut it = Self::default();
         step(
             format.find(|c: char| !c.is_whitespace()).unwrap_or(0),
@@ -610,14 +427,7 @@ impl<'a> FormatArgument<'a> {
                 );
                 step(precision, format, idx);
             }
-<<<<<<< HEAD
-            it.trait_ =
-                TraitSpec::from_str(format, idx).ok_or(FormatArgumentError::ExpectedBrace(*idx))?
-||||||| parent of 71c8234 (test: add comment on thread)
-            it.trait_ = Trait::from_str(format)?
-=======
             it.trait_ = TraitSpec::from_str(format, idx)?;
->>>>>>> 71c8234 (test: add comment on thread)
         }
         Ok(it)
     }
