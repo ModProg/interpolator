@@ -51,7 +51,7 @@ enum Sign {
     Minus,
     #[default]
     #[display(fmt = "")]
-    No,
+    None,
 }
 
 #[derive(Default, Debug, Arbitrary)]
@@ -122,6 +122,7 @@ fn test(
             use template::{{format, Formattable}};
             use std::thread;
             fn main() {
+                // This stack overflows without the thread on windows + nightly
                 thread::spawn(move ||{
                     let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
                     #(assert!(
@@ -138,7 +139,7 @@ fn test(
 #[test]
 fn string() {
     test(
-        "\"test\"",
+        "test",
         quote!(debug_display),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
