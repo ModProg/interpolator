@@ -1,3 +1,4 @@
+#[cfg(feature = "number")]
 use std::f64::consts::PI;
 use std::fmt::Display;
 use std::iter;
@@ -140,51 +141,75 @@ fn test(
 fn string() {
     test(
         "test",
+        #[cfg(feature = "debug")]
         quote!(debug_display),
+        #[cfg(not(feature = "debug"))]
+        quote!(display),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
+            #[cfg(feature = "debug")]
             Trait::Question,
+            #[cfg(feature = "debug")]
             Trait::XQuestion,
+            #[cfg(feature = "debug")]
             Trait::xQuestion,
         ]),
     );
 }
 
 #[test]
+#[cfg(feature = "number")]
 fn integer() {
     test(
         42,
         quote!(integer),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
+            #[cfg(feature = "debug")]
             Trait::Question,
+            #[cfg(feature = "debug")]
             Trait::XQuestion,
+            #[cfg(feature = "debug")]
             Trait::xQuestion,
+            #[cfg(feature = "number")]
             Trait::x,
+            #[cfg(feature = "number")]
             Trait::X,
+            #[cfg(feature = "number")]
             Trait::b,
+            #[cfg(feature = "number")]
             Trait::o,
+            #[cfg(feature = "number")]
             Trait::e,
+            #[cfg(feature = "number")]
             Trait::E,
         ]),
     );
 }
 #[test]
+#[cfg(feature = "number")]
 fn float() {
     test(
         PI,
         quote!(float),
         FormatArgument::arbitrary_with(&[
             Trait::Display,
+            #[cfg(feature = "debug")]
             Trait::Question,
+            #[cfg(feature = "debug")]
             Trait::XQuestion,
+            #[cfg(feature = "debug")]
             Trait::xQuestion,
+            #[cfg(feature = "number")]
             Trait::e,
+            #[cfg(feature = "number")]
             Trait::E,
         ]),
     );
 }
+
 #[test]
+#[cfg(feature = "pointer")]
 fn pointer() {
     test(
         quote!(&42),

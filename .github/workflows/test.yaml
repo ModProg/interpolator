@@ -20,7 +20,12 @@ jobs:
           - nightly
         features:
           - ""
-          - --no-default-features
+          - "-F debug"
+          - "-F number"
+          - "-F pointer"
+          - "-F debug -F number"
+          - "-F number -F pointer"
+          - --all-features
         include:
           - rust: nightly
             cargo_flags: -Z minimal-versions

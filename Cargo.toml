@@ -10,9 +10,22 @@ readme = "README.md"
 repository = "https://github.com/ModProg/template"
 documentation = "https://docs.rs/template"
 
+[features]
+default = ["debug", "number", "pointer"]
+debug = []
+number = []
+pointer = []
+
 [dev-dependencies]
 derive_more = "0.99.17"
 proptest = "1.1.0"
 proptest-derive = "0.3.0"
 quote = "1.0.23"
 trybuild2 = "1.0.0"
+
+# docs.rs-specific configuration
+[package.metadata.docs.rs]
+# document all features
+all-features = true
+# defines the configuration attribute `docsrs`
+rustdoc-args = ["--cfg", "docsrs"]
