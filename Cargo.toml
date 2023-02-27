@@ -1,14 +1,15 @@
 [package]
 name = "interpolator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 categories = ["template-engine", "value-formatting", "text-processing"]
 description = "runtime format strings, fully compatible with std's macros"
 keywords = ["text", "interpolation", "format"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/ModProg/template"
-documentation = "https://docs.rs/template"
+repository = "https://github.com/ModProg/interpolator"
+documentation = "https://docs.rs/interpolator"
+include = ["src/**/*", "README.md", "CHANGELOG.md"]
 
 [features]
 # default = ["debug", "number", "pointer"]
