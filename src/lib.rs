@@ -516,7 +516,7 @@ impl<'a> FormatArgument<'a> {
 /// # Errors
 ///
 /// It will return an error if the specified format string has invalid syntax,
-/// the type doesn't implement the expected trait, or the formatting it self
+/// the type doesn't implement the expected trait, or the formatting itself
 /// failed.
 ///
 /// For more details have a look at [`Error`] and [`FormatArgumentError`].
@@ -590,7 +590,7 @@ pub fn write<K: Borrow<str> + Eq + Hash>(
 /// # Errors
 ///
 /// It will return an error if the specified format string has invalid syntax,
-/// the type doesn't implement the expected trait, or the formatting it self
+/// the type doesn't implement the expected trait, or the formatting itself
 /// failed.
 ///
 /// For more details have a look at [`Error`] and [`FormatArgumentError`].
