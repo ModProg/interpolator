@@ -53,26 +53,26 @@ macro_rules! call_format_value {
 }
 
 #[cfg(feature = "number")]
-mod E;
+mod upper_exp;
 #[cfg(feature = "number")]
-mod X;
+mod upper_hex;
 #[cfg(feature = "debug")]
-mod Xquestion;
+mod upper_hex_debug;
 #[cfg(feature = "number")]
-mod b;
+mod binary;
 mod display;
 #[cfg(feature = "number")]
-mod e;
+mod lower_exp;
 #[cfg(feature = "number")]
-mod o;
+mod octal;
 #[cfg(feature = "pointer")]
-mod p;
+mod pointer;
 #[cfg(feature = "debug")]
-mod question;
+mod debug;
 #[cfg(feature = "number")]
-mod x;
+mod lower_hex;
 #[cfg(feature = "debug")]
-mod xquestion;
+mod lower_hex_question;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn format_value(
@@ -90,16 +90,16 @@ pub(crate) fn format_value(
     call_format_value! {
         match out, value, width, precision, alignment, sign, hash, zero, trait_, idx {
             Display => display(get_display),
-            Question => question(get_debug, "debug"),
-            xQuestion => xquestion(get_debug, "debug"),
-            XQuestion => Xquestion(get_debug, "debug"),
-            x => x(get_lower_hex, "number"),
-            X => X(get_upper_hex, "number"),
-            b => b(get_binary, "number"),
-            o => o(get_octal, "number"),
-            e => e(get_lower_exp, "number"),
-            E => E(get_upper_exp, "number"),
-            p => p(get_pointer, "pointer"),
+            Question => debug(get_debug, "debug"),
+            xQuestion => lower_hex_question(get_debug, "debug"),
+            XQuestion => upper_hex_debug(get_debug, "debug"),
+            x => lower_hex(get_lower_hex, "number"),
+            X => upper_hex(get_upper_hex, "number"),
+            b => binary(get_binary, "number"),
+            o => octal(get_octal, "number"),
+            e => lower_exp(get_lower_exp, "number"),
+            E => upper_exp(get_upper_exp, "number"),
+            p => pointer(get_pointer, "pointer"),
         }
     }
     .map_err(|e| Error::FmtError(e, idx))

@@ -1,4 +1,4 @@
-format_value! {question(out, value, Debug):
+format_value! {debug(out, value, Debug):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:?}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0?}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+?}"),

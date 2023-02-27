@@ -1,4 +1,4 @@
-format_value! {x(out, value, LowerHex):
+format_value! {lower_hex(out, value, LowerHex):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:x}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0x}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+x}"),

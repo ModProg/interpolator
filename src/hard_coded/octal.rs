@@ -1,4 +1,4 @@
-format_value! {o(out, value, Octal):
+format_value! {octal(out, value, Octal):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:o}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0o}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+o}"),

@@ -1,4 +1,4 @@
-format_value! {Xquestion(out, value, Debug):
+format_value! {upper_hex_debug(out, value, Debug):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:X?}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0X?}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+X?}"),

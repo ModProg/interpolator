@@ -1,4 +1,4 @@
-format_value! {p(out, value, Pointer):
+format_value! {pointer(out, value, Pointer):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:p}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0p}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+p}"),

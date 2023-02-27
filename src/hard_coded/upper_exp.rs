@@ -1,4 +1,4 @@
-format_value! {E(out, value, UpperExp):
+format_value! {upper_exp(out, value, UpperExp):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:E}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0E}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+E}"),

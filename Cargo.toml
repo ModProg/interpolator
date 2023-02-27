@@ -11,7 +11,7 @@ repository = "https://github.com/ModProg/template"
 documentation = "https://docs.rs/template"
 
 [features]
-default = []
+default = ["debug", "number", "pointer"]
 debug = []
 number = []
 pointer = []

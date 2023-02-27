@@ -1,4 +1,4 @@
-format_value! {b(out, value, Binary):
+format_value! {binary(out, value, Binary):
     (None, None, A::None, S::None, false, false) => write!(out, "{value:b}"),
     (None, None, A::None, S::None, false, true) => write!(out, "{value:0b}"),
     (None, None, A::None, S::Plus, false, false) => write!(out, "{value:+b}"),
