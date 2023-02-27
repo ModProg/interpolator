@@ -11,8 +11,7 @@
 //! - `number` enables `x`, `X`, `b`, `o`, `e` and `E` trait specifiers
 //! - `pointer` enables `p` trait specifiers
 #![warn(clippy::pedantic, missing_docs)]
-#![allow(clippy::return_self_not_must_use)]
-#![allow(clippy::wildcard_imports)]
+#![allow(clippy::return_self_not_must_use, clippy::wildcard_imports, clippy::implicit_hasher)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -512,9 +511,9 @@ impl<'a> FormatArgument<'a> {
 /// failed.
 ///
 /// For more details have a look at [`Error`] and [`FormatArgumentError`].
-pub fn format<K: Borrow<str> + Eq + Hash, S: ::std::hash::BuildHasher>(
+pub fn format<K: Borrow<str> + Eq + Hash>(
     mut format: &str,
-    context: &HashMap<K, Formattable, S>,
+    context: &HashMap<K, Formattable>,
 ) -> Result<String> {
     let format = &mut format;
     let mut out = String::with_capacity(format.len());
