@@ -11,7 +11,11 @@
 //! - `number` enables `x`, `X`, `b`, `o`, `e` and `E` trait specifiers
 //! - `pointer` enables `p` trait specifiers
 #![warn(clippy::pedantic, missing_docs)]
-#![allow(clippy::return_self_not_must_use, clippy::wildcard_imports, clippy::implicit_hasher)]
+#![allow(
+    clippy::return_self_not_must_use,
+    clippy::wildcard_imports,
+    clippy::implicit_hasher
+)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -263,23 +267,23 @@ enum TraitSpec {
     #[cfg(feature = "debug")]
     Question,
     #[cfg(feature = "debug")]
-    xQuestion,
+    LowerHexQuestion,
     #[cfg(feature = "debug")]
-    XQuestion,
+    UpperHexQuestion,
     #[cfg(feature = "number")]
-    x,
+    LowerHex,
     #[cfg(feature = "number")]
-    X,
+    UpperHex,
     #[cfg(feature = "number")]
-    b,
+    Binary,
     #[cfg(feature = "number")]
-    o,
+    Octal,
     #[cfg(feature = "number")]
-    e,
+    LowerExp,
     #[cfg(feature = "number")]
-    E,
+    UpperExp,
     #[cfg(feature = "pointer")]
-    p,
+    Pointer,
 }
 
 impl TraitSpec {
@@ -295,7 +299,7 @@ impl TraitSpec {
             #[cfg(feature = "debug")]
             b'x' if format.as_bytes()[1] == b'?' => {
                 step(1, format, idx);
-                Ok(TraitSpec::xQuestion)
+                Ok(TraitSpec::LowerHexQuestion)
             }
             #[cfg(not(feature = "debug"))]
             b'x' if format.as_bytes()[1] == b'?' => {
@@ -304,38 +308,38 @@ impl TraitSpec {
             #[cfg(feature = "debug")]
             b'X' if format.as_bytes()[1] == b'?' => {
                 step(1, format, idx);
-                Ok(TraitSpec::XQuestion)
+                Ok(TraitSpec::UpperHexQuestion)
             }
             #[cfg(not(feature = "debug"))]
             b'X' if format.as_bytes()[1] == b'?' => {
                 Err(Error::UnsupportedOption("X?", "debug", *idx))
             }
             #[cfg(feature = "number")]
-            b'o' => Ok(TraitSpec::o),
+            b'o' => Ok(TraitSpec::Octal),
             #[cfg(not(feature = "number"))]
             b'o' => Err(Error::UnsupportedOption("o", "number", *idx)),
             #[cfg(feature = "number")]
-            b'x' => Ok(TraitSpec::x),
+            b'x' => Ok(TraitSpec::LowerHex),
             #[cfg(not(feature = "number"))]
             b'x' => Err(Error::UnsupportedOption("x", "number", *idx)),
             #[cfg(feature = "number")]
-            b'X' => Ok(TraitSpec::X),
+            b'X' => Ok(TraitSpec::UpperHex),
             #[cfg(not(feature = "number"))]
             b'X' => Err(Error::UnsupportedOption("X", "number", *idx)),
             #[cfg(feature = "number")]
-            b'b' => Ok(TraitSpec::b),
+            b'b' => Ok(TraitSpec::Binary),
             #[cfg(not(feature = "number"))]
             b'b' => Err(Error::UnsupportedOption("b", "number", *idx)),
             #[cfg(feature = "number")]
-            b'e' => Ok(TraitSpec::e),
+            b'e' => Ok(TraitSpec::LowerExp),
             #[cfg(not(feature = "number"))]
             b'e' => Err(Error::UnsupportedOption("e", "number", *idx)),
             #[cfg(feature = "number")]
-            b'E' => Ok(TraitSpec::E),
+            b'E' => Ok(TraitSpec::UpperExp),
             #[cfg(not(feature = "number"))]
             b'E' => Err(Error::UnsupportedOption("E", "number", *idx)),
             #[cfg(feature = "pointer")]
-            b'p' => Ok(TraitSpec::p),
+            b'p' => Ok(TraitSpec::Pointer),
             #[cfg(not(feature = "pointer"))]
             b'p' => Err(Error::UnsupportedOption("p", "pointer", *idx)),
             _ => Err(FormatArgumentError::ExpectedBrace(*idx).into()),
@@ -350,7 +354,6 @@ impl TraitSpec {
 #[derive(Default, Debug)]
 struct FormatArgument<'a> {
     ident: &'a str,
-    fill: Option<char>,
     alignment: Alignment,
     sign: Sign,
     hash: bool,
@@ -376,6 +379,8 @@ pub enum FormatArgumentError {
     InvalidWidth(ParseIntError, usize),
     /// Unable to parse specified precision as usize
     InvalidPrecision(ParseIntError, usize),
+    /// Fill is not supported due to [rust-lang/rfcs#3394](https://github.com/rust-lang/rfcs/pull/3394)
+    Fill(usize),
 }
 
 impl Display for FormatArgumentError {
@@ -391,6 +396,10 @@ impl Display for FormatArgumentError {
             FormatArgumentError::InvalidPrecision(e, idx) => {
                 write!(f, "Unable to parse precision at {idx} as usize: {e}")
             }
+            FormatArgumentError::Fill(idx) => write!(
+                f,
+                "Fill is not supported due to https://github.com/rust-lang/rfcs/pull/3394 at {idx}"
+            ),
         }
     }
 }
@@ -423,10 +432,8 @@ impl<'a> FormatArgument<'a> {
             if format[fill.len_utf8()..].is_empty() {
                 return Ok(it);
             }
-            if let Some(alignment) = alignment(format[fill.len_utf8()..].as_bytes()[0]) {
-                it.fill = Some(fill);
-                it.alignment = alignment;
-                step(1 + fill.len_utf8(), format, idx);
+            if alignment(format[fill.len_utf8()..].as_bytes()[0]).is_some() {
+                return Err(FormatArgumentError::Fill(*idx).into());
             } else if fill.is_ascii() {
                 if let Some(alignment) = alignment(fill as u8) {
                     it.alignment = alignment;
@@ -529,7 +536,6 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
             let start = *idx;
             let FormatArgument {
                 ident,
-                fill,
                 alignment,
                 sign,
                 hash,
@@ -541,36 +547,9 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
             let value = context
                 .get(ident)
                 .ok_or(Error::MissingValue(ident.to_string(), start))?;
-            if fill.is_some() {
-                unimplemented!("fill is not supported");
-                // let mut tmp = String::new();
-                // format_value(
-                //     &mut tmp, value, 0, precision, alignment, sign, hash,
-                // zero, trait_, )?;
-                // if tmp.len() < width {
-                //     let fill = &fill.to_string();
-                //     let width = width - tmp.len();
-                //     if alignment == Alignment::Right {
-                //         out.push_str(&fill.repeat(width))
-                //     }
-                //     if alignment == Alignment::Center {
-                //         out.push_str(&fill.repeat(width / 2))
-                //     }
-                //     out.push_str(&tmp);
-                //     if alignment == Alignment::Center {
-                //         out.push_str(&fill.repeat(width - width / 2))
-                //     }
-                //     if alignment == Alignment::Left {
-                //         out.push_str(&fill.repeat(width))
-                //     }
-                // } else {
-                //     out.push_str(&tmp);
-                // }
-            } else {
-                format_value(
-                    &mut out, value, width, precision, alignment, sign, hash, zero, trait_, *idx,
-                )?;
-            }
+            format_value(
+                &mut out, value, width, precision, alignment, sign, hash, zero, trait_, *idx,
+            )?;
             ensure!(
                 format.starts_with('}'),
                 FormatArgumentError::ExpectedBrace(*idx).into()
@@ -586,35 +565,4 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
         step(next.len_utf8(), format, idx);
     }
     Ok(out)
-}
-
-#[test]
-fn test_format() {
-    // let p = &42;
-    // assert_eq!(
-    //     format(
-    //         "{ident:a>+09.15}",
-    //         [("ident", Formattable::from(&"hi"))].into_iter().collect(),
-    //     )
-    //     .unwrap(),
-    //     format!("{ident:a>+09.15}", ident = "hi")
-    // );
-    assert_eq!(
-        format("{{hello}}", &HashMap::<String, Formattable>::new()).unwrap(),
-        "{hello}"
-    );
-    // assert_eq!(
-    //     format(
-    //         "{hi:10} {hi:?} {int:#x?} {int:b} {int:#X} {int:4o} {display}
-    // {display:5} {display:05}",         &[
-    //             ("hi", Formattable::debug_display(&"hello")),
-    //             ("int", Formattable::integer(&123u8)),
-    //             ("display", (&10).into())
-    //         ]
-    //         .into_iter()
-    //         .collect()
-    //     )
-    //     .unwrap(),
-    //     r#"hello      "hello" 0x7b 1111011 0x7B  173 10    10 00010"#
-    // );
 }
