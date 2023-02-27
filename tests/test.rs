@@ -120,16 +120,25 @@ fn test(
     t.pass_inline(
         &converter.to_token_stream().to_string(),
         &quote! {
-            use template::{{format, Formattable}};
+            use template::{{format, Formattable, write}};
             use std::thread;
+            use std::fmt::Write;
             fn main() {
                 // This stack overflows without the thread on windows + nightly
                 thread::spawn(move ||{
                     let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
-                    #(assert!(
-                            format(#format_args, value).unwrap() ==  format!(#format_args, ident = #value),
+                    #(
+                        assert_eq!(
+                            format(#format_args, value).unwrap(),
+                            format!(#format_args, ident = #value),
                             "{}", #format_args
-                    );)*
+                        );
+                        let mut buf_rt = String::new();
+                        write(&mut buf_rt, #format_args, value).unwrap();
+                        let mut buf_ct = String::new();
+                        write!(&mut buf_ct, #format_args, ident = #value).unwrap();
+                        assert_eq!(buf_rt, buf_ct, "{}", #format_args);
+                    )*
                 }).join().unwrap();
             }
         }
