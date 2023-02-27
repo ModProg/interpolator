@@ -120,7 +120,7 @@ fn test(
     t.pass_inline(
         &converter.to_token_stream().to_string(),
         &quote! {
-            use template::{{format, Formattable, write}};
+            use interpolator::{{format, Formattable, write}};
             use std::thread;
             use std::fmt::Write;
             fn main() {
@@ -235,7 +235,7 @@ proptest! {
         let format_arg = format_arg.to_string();
         let format_arg = format_arg.escape_default();
         t.pass_inline("display", &format!{r#"
-            use template::{{format, Formattable}};
+            use interpolator::{{format, Formattable}};
             fn main() {{
                 assert_eq!(
                     format("{format_arg}", [("ident", (&"test").into())].into_iter().collect()).unwrap(),
@@ -261,7 +261,7 @@ proptest! {
         let format_arg = format_arg.to_string();
         let format_arg = format_arg.escape_default();
         t.pass_inline("integer", &format!{r#"
-            use template::{{format, Formattable}};
+            use interpolator::{{format, Formattable}};
             fn main() {{
                 assert_eq!(
                     format("{format_arg}", [("ident", Formattable::integer(&10))].into_iter().collect()).unwrap(),
@@ -281,7 +281,7 @@ proptest! {
         let format_arg = format_arg.to_string();
         let format_arg = format_arg.escape_default();
         t.pass_inline("float", &format!{r#"
-            use template::{{format, Formattable}};
+            use interpolator::{{format, Formattable}};
             fn main() {{
                 assert_eq!(
                     format("{format_arg}", [("ident", Formattable::float(&3.14))].into_iter().collect()).unwrap(),
@@ -299,7 +299,7 @@ proptest! {
         let format_arg = format_arg.to_string();
         let format_arg = format_arg.escape_default();
         t.pass_inline("pointer", &format!{r#"
-            use template::{{format, Formattable}};
+            use interpolator::{{format, Formattable}};
             fn main() {{
                 let p = &42;
                 assert_eq!(

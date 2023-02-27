@@ -500,7 +500,7 @@ impl<'a> FormatArgument<'a> {
 /// containing [`Formattable`] values.
 ///
 /// ```
-/// use template::{write, Formattable};
+/// use interpolator::{write, Formattable};
 ///
 /// let mut buf = String::new();
 /// write(
@@ -576,7 +576,7 @@ pub fn write<K: Borrow<str> + Eq + Hash>(
 /// string.
 ///
 /// ```
-/// use template::{format, Formattable};
+/// use interpolator::{format, Formattable};
 ///
 /// let formatted = format(
 ///     "{value:+05}", // could be dynamic
