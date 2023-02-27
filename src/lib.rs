@@ -496,7 +496,7 @@ impl<'a> FormatArgument<'a> {
 
 /// Runtime version of [`write!`].
 ///
-/// Takes a mutable [`Write`] e.g `&mut String`, a format string and a context,
+/// Takes a mutable [`Write`] e.g. `&mut String`, a format string and a context,
 /// containing [`Formattable`] values.
 ///
 /// ```
