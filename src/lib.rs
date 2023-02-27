@@ -125,7 +125,7 @@ macro_rules! ensure {
 /// Utility struct holding references to the trait implementation of a value to
 /// enable runtime verification and execution of them
 pub struct Formattable<'a> {
-    #[cfg(feature = "debug")]
+    #[cfg(any(feature = "debug", feature = "number"))]
     debug: Option<&'a dyn Debug>,
     display: Option<&'a dyn Display>,
     #[cfg(feature = "number")]
