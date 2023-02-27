@@ -1,6 +1,6 @@
 //! Runtime implementation of [`format!`].
 //!
-//! See [`format()`] for details.
+//! See [`format`](format()) and [`write`](write()) for details.
 //!
 //! # Features
 //! By default only [`Display`] is supported, the rest of the
@@ -24,7 +24,7 @@ use std::error::Error as StdError;
 use std::fmt::Pointer;
 #[cfg(feature = "number")]
 use std::fmt::{Binary, LowerExp, LowerHex, Octal, UpperExp, UpperHex};
-use std::fmt::{Debug, Display, Error as FmtError};
+use std::fmt::{Debug, Display, Error as FmtError, Write};
 use std::hash::Hash;
 use std::num::ParseIntError;
 
@@ -494,6 +494,82 @@ impl<'a> FormatArgument<'a> {
     }
 }
 
+/// Runtime version of [`write!`].
+///
+/// Takes a mutable [`Write`] e.g `&mut String`, a format string and a context,
+/// containing [`Formattable`] values.
+///
+/// ```
+/// use template::{write, Formattable};
+///
+/// let mut buf = String::new();
+/// write(
+///     &mut buf,
+///     "{value:+05}", // could be dynamic
+///     &[("value", Formattable::display(&12))].into_iter().collect(),
+/// )
+/// .unwrap();
+///
+/// assert_eq!(buf, format!("{:+05}", 12));
+/// ```
+///
+/// # Errors
+///
+/// It will return an error if the specified format string has invalid syntax,
+/// the type doesn't implement the expected trait, or the formatting it self
+/// failed.
+///
+/// For more details have a look at [`Error`] and [`FormatArgumentError`].
+pub fn write<K: Borrow<str> + Eq + Hash>(
+    out: &mut impl Write,
+    mut format: &str,
+    context: &HashMap<K, Formattable>,
+) -> Result {
+    let format = &mut format;
+    let idx = &mut 0;
+    while !format.is_empty() {
+        if format.starts_with("{{") || format.starts_with("}}") {
+            out.write_str(&format[..1])
+                .map_err(|e| Error::FmtError(e, *idx))?;
+            step(2, format, idx);
+            continue;
+        }
+        if format.starts_with('{') {
+            step(1, format, idx);
+            let start = *idx;
+            let FormatArgument {
+                ident,
+                alignment,
+                sign,
+                hash,
+                zero,
+                width,
+                precision,
+                trait_,
+            } = FormatArgument::from_str(format, idx)?;
+            let value = context
+                .get(ident)
+                .ok_or(Error::MissingValue(ident.to_string(), start))?;
+            format_value(
+                out, value, width, precision, alignment, sign, hash, zero, trait_, *idx,
+            )?;
+            ensure!(
+                format.starts_with('}'),
+                FormatArgumentError::ExpectedBrace(*idx).into()
+            );
+            step(1, format, idx);
+            continue;
+        }
+        let next = format
+            .chars()
+            .next()
+            .expect("should contain a char if not empty");
+        out.write_char(next).map_err(|e| Error::FmtError(e, *idx))?;
+        step(next.len_utf8(), format, idx);
+    }
+    Ok(())
+}
+
 /// Runtime version of [`format!`].
 ///
 /// Takes a string and a context, containing [`Formattable`] values, returns a
@@ -519,50 +595,10 @@ impl<'a> FormatArgument<'a> {
 ///
 /// For more details have a look at [`Error`] and [`FormatArgumentError`].
 pub fn format<K: Borrow<str> + Eq + Hash>(
-    mut format: &str,
+    format: &str,
     context: &HashMap<K, Formattable>,
 ) -> Result<String> {
-    let format = &mut format;
     let mut out = String::with_capacity(format.len());
-    let idx = &mut 0;
-    while !format.is_empty() {
-        if format.starts_with("{{") || format.starts_with("}}") {
-            out.push_str(&format[..1]);
-            step(2, format, idx);
-            continue;
-        }
-        if format.starts_with('{') {
-            step(1, format, idx);
-            let start = *idx;
-            let FormatArgument {
-                ident,
-                alignment,
-                sign,
-                hash,
-                zero,
-                width,
-                precision,
-                trait_,
-            } = FormatArgument::from_str(format, idx)?;
-            let value = context
-                .get(ident)
-                .ok_or(Error::MissingValue(ident.to_string(), start))?;
-            format_value(
-                &mut out, value, width, precision, alignment, sign, hash, zero, trait_, *idx,
-            )?;
-            ensure!(
-                format.starts_with('}'),
-                FormatArgumentError::ExpectedBrace(*idx).into()
-            );
-            step(1, format, idx);
-            continue;
-        }
-        let next = format
-            .chars()
-            .next()
-            .expect("should contain a char if not empty");
-        out.push(next);
-        step(next.len_utf8(), format, idx);
-    }
+    write(&mut out, format, context)?;
     Ok(out)
 }

@@ -5,7 +5,7 @@ macro_rules! format_value {
     ($name:ident($out:ident, $v:ident, $Trait:ident): $($tts:tt)*) => {
         #[allow(clippy::too_many_arguments)]
         pub(crate) fn $name(
-            $out: &mut String,
+            $out: &mut impl std::fmt::Write,
             $v: impl std::fmt::$Trait,
             width: Option<usize>,
             precision: Option<usize>,
@@ -15,7 +15,6 @@ macro_rules! format_value {
             zero: bool,
         ) -> crate::Result<(), std::fmt::Error> {
             use {crate::Alignment as A, crate::Sign as S};
-            use std::fmt::Write;
 
             match (width, precision, alignment, sign, hash, zero) {
                 $($tts)*
@@ -76,7 +75,7 @@ mod upper_hex_debug;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn format_value(
-    out: &mut String,
+    out: &mut impl Write,
     value: &Formattable,
     width: Option<usize>,
     precision: Option<usize>,
