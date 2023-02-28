@@ -25,6 +25,12 @@ jobs:
           - "-F pointer"
           - "-F debug -F number"
           - "-F number -F pointer"
+          - "-F iter"
+          - "-F iter -F debug"
+          - "-F iter -F number"
+          - "-F iter -F pointer"
+          - "-F iter -F debug -F number"
+          - "-F iter -F number -F pointer"
           - --all-features
         include:
           - rust: nightly

@@ -24,6 +24,7 @@ pub enum Error {
     UnsupportedOption(&'static str, &'static str, usize),
 }
 
+#[cfg(feature = "iter")]
 impl Error {
     pub(crate) fn add_idx(self, idx: usize) -> Self {
         use Error::*;
@@ -119,6 +120,7 @@ pub enum ParseError {
     RangeBound(ParseIntError, usize),
 }
 
+#[cfg(feature = "iter")]
 impl ParseError {
     pub(crate) fn add_idx(self, idx: usize) -> ParseError {
         use ParseError::*;

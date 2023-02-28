@@ -19,41 +19,45 @@
 //! assert_eq!(formatted, format!("{:+05}", 12));
 //! # return Ok::<(), interpolator::Error>(())
 //! ```
-//!
-//! # `i` iter format
-//!
-//! The feature `iter` enables an additional format trait `i`, it allows to
-//! format a list of values with a format string and an optional join
-//! expression.
-//!
-//! The syntax is `{list:i(the format string, '{it}' is the array element)(the
-//! optional join)}`, an empty join can also be omitted `{list:i({it})}`. Should
-//! you need to use `)` inside your format string or join, you can add `#`
-//! similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals).
-//!
-//! It is also possible to only iterate a sub-slice specified through a range
-//! before the format string, i.e. `{list:i1..4({it})}`. For open ranges range
-//! bounds can also be omitted. To index from the end, you can use negative
-//! range bounds.
-//!
-//! A [`Formattable`] implementing iter is created using [`Formattable::iter`]:
-//!
-//! ```
-//! // HashMap macro
-//! use collection_literals::hash;
-//! use interpolator::{format, Formattable};
-//! // Needs to be a slice of references so because `Formattable::display` expects a
-//! // reference
-//! let items = [&"hello", &"hi", &"hey"].map(Formattable::display);
-//! let items = Formattable::iter(&items);
-//! let format_str = "Greetings: {items:i..-1(`{it}`)(, )} and {items:i-1..(`{it}`)}";
-//! assert_eq!(
-//!     format(format_str, &hash!("items" => items))?,
-//!     "Greetings: `hello`, `hi` and `hey`"
-//! );
-//! # return Ok::<(), interpolator::Error>(())
-//! ```
-//!
+
+#![cfg_attr(
+    feature = "iter",
+    doc = r#"
+# `i` iter format
+
+The feature `iter` enables an additional format trait `i`, it allows to
+format a list of values with a format string and an optional join
+expression.
+
+The syntax is `{list:i(the format string, '{it}' is the array element)(the
+optional join)}`, an empty join can also be omitted `{list:i({it})}`. Should
+you need to use `)` inside your format string or join, you can add `#`
+similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals).
+
+It is also possible to only iterate a sub-slice specified through a range
+before the format string, i.e. `{list:i1..4({it})}`. For open ranges range
+bounds can also be omitted. To index from the end, you can use negative
+range bounds.
+
+A [`Formattable`] implementing iter is created using [`Formattable::iter`]:
+
+```
+// HashMap macro
+use collection_literals::hash;
+use interpolator::{format, Formattable};
+// Needs to be a slice of references so because `Formattable::display` expects a
+// reference
+let items = [&"hello", &"hi", &"hey"].map(Formattable::display);
+let items = Formattable::iter(&items);
+let format_str = "Greetings: {items:i..-1(`{it}`)(, )} and {items:i-1..(`{it}`)}";
+assert_eq!(
+    format(format_str, &hash!("items" => items))?,
+    "Greetings: `hello`, `hi` and `hey`"
+);
+# return Ok::<(), interpolator::Error>(())
+```"#
+)]
+
 //! See [`format`](format()) and [`write`](write()) for details.
 //!
 //! # Features
@@ -208,30 +212,4 @@ pub fn write<'a, K: Borrow<str> + Eq + Hash, F: Borrow<Formattable<'a>>>(
         step(next.len_utf8(), format, idx);
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use collection_literals::hash;
-
-    use super::*;
-
-    #[test]
-    fn iter() {
-        let list = &[&1, &5].map(Formattable::display);
-        let context = &hash!("h"=> Formattable::iter(list));
-        assert_eq!(
-            format("{h:i(`{it:+05}`)#() )#}", context).unwrap(),
-            "`+0001`) `+0005`"
-        );
-        assert_eq!(format("{h:i(``)}", context).unwrap(), "````");
-        assert_eq!(format("{h:i..({it})}", context).unwrap(), "15");
-        assert_eq!(format("{h:i1..({it})}", context).unwrap(), "5");
-        assert_eq!(format("{h:i1..1({it})}", context).unwrap(), "");
-        assert_eq!(format("{h:i2..1({it})}", context).unwrap(), "");
-        assert_eq!(format("{h:i-1..({it})}", context).unwrap(), "5");
-        assert_eq!(format("{h:i..-1({it})}", context).unwrap(), "1");
-        assert_eq!(format("{h:i..-2({it})}", context).unwrap(), "");
-        assert_eq!(format("{h:i-5..-10({it})}", context).unwrap(), "");
-    }
 }

@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::str::FromStr;
 
 use super::*;
@@ -55,19 +56,20 @@ pub(crate) enum TraitSpec<'a> {
     Pointer,
     #[cfg(feature = "iter")]
     Iter(Option<Range>, &'a str, Option<&'a str>),
+    #[allow(unused)]
+    Phantom(&'a Infallible),
 }
 
-fn parse_number<T: FromStr<Err = ParseIntError>>(
+fn parse_number<T: FromStr, IE: Into<Error>>(
     format: &mut &str,
     idx: &mut usize,
     start: usize,
+    error: fn(<T as FromStr>::Err, usize) -> IE,
 ) -> Result<T> {
     let len = format
         .find(|c: char| c != '-' && !c.is_ascii_digit())
         .ok_or(ParseError::FormatSpecUnclosed(start))?;
-    let i = format[..len]
-        .parse()
-        .map_err(|e| ParseError::RangeBound(e, *idx))?;
+    let i = format[..len].parse().map_err(|e| error(e, *idx).into())?;
     step(len, format, idx);
     Ok(i)
 }
@@ -80,7 +82,7 @@ pub(crate) struct Range(
 );
 
 impl<'a> TraitSpec<'a> {
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, unused_variables)]
     fn from_str(format: &mut &'a str, idx: &mut usize, start: usize) -> Result<Self> {
         if format.starts_with('}') {
             return Ok(Self::Display);
@@ -148,7 +150,7 @@ impl<'a> TraitSpec<'a> {
                                 step(2, format, idx);
                                 None
                             } else {
-                                let lhs = parse_number(format, idx, start)?;
+                                let lhs = parse_number(format, idx, start, ParseError::RangeBound)?;
                                 ensure!(format.starts_with(".."), ParseError::Expected("..", *idx));
                                 step(2, format, idx);
                                 Some(lhs)
@@ -162,7 +164,7 @@ impl<'a> TraitSpec<'a> {
                             if format.starts_with('(') {
                                 None
                             } else {
-                                Some(parse_number(format, idx, start)?)
+                                Some(parse_number(format, idx, start, ParseError::RangeBound)?)
                             },
                         ))
                     },
@@ -186,6 +188,7 @@ impl<'a> TraitSpec<'a> {
     }
 }
 
+#[cfg(feature = "iter")]
 fn collect_parenthesized<'a>(
     format: &mut &'a str,
     idx: &mut usize,
@@ -297,27 +300,21 @@ impl<'a> FormatArgument<'a> {
                 step(1, format, idx);
             }
             if format.starts_with(|c: char| c.is_ascii_digit()) {
-                let width = format
-                    .find(|c: char| !c.is_ascii_digit())
-                    .ok_or(ParseError::FormatSpecUnclosed(start_index))?;
-                it.width = Some(
-                    format[..width]
-                        .parse()
-                        .map_err(|e| ParseError::InvalidWidth(e, *idx))?,
-                );
-                step(width, format, idx);
+                it.width = Some(parse_number(
+                    format,
+                    idx,
+                    start_index,
+                    ParseError::InvalidWidth,
+                )?);
             }
             if format.starts_with('.') {
                 step(1, format, idx);
-                let precision = format
-                    .find(|c: char| !c.is_ascii_digit())
-                    .ok_or(ParseError::FormatSpecUnclosed(start_index))?;
-                it.precision = Some(
-                    format[..precision]
-                        .parse()
-                        .map_err(|e| ParseError::InvalidPrecision(e, *idx))?,
-                );
-                step(precision, format, idx);
+                it.precision = Some(parse_number(
+                    format,
+                    idx,
+                    start_index,
+                    ParseError::InvalidPrecision,
+                )?);
             }
             it.trait_ = TraitSpec::from_str(format, idx, start_index)?;
         }
@@ -326,6 +323,7 @@ impl<'a> FormatArgument<'a> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "iter")]
 mod test {
     use super::*;
     #[test]
