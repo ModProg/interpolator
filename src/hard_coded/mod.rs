@@ -23,6 +23,15 @@ macro_rules! format_value {
     };
 }
 
+macro_rules! branch {
+    (($_:ident), $($tts:tt)*) => {
+        $($tts)*
+    };
+    (($idx:ident return), $($tts:tt)*) => {
+        return $($tts)*.map_err(|e|e.add_idx($idx))
+    };
+}
+
 macro_rules! call_format_value {
     (
         match
@@ -36,16 +45,16 @@ macro_rules! call_format_value {
         $zero:ident,
         $trait_:ident,
         $idx:ident {
-            $($Trait:ident => $fn:ident($getter:ident $(, $feature:literal)?),)*
+            $($Trait:ident$(($($fields:tt)*))? => $fn:ident($getter:ident $(, $feature:literal)?) $($ret:ident)?,)*
         }
     ) => {
         match $trait_ {
-            $($(#[cfg(feature = $feature)])? crate::TraitSpec::$Trait => {
+            $($(#[cfg(feature = $feature)])? crate::TraitSpec::$Trait$(($($fields)*))? => {
                 let value = match $value.$getter() {
                     Ok(v) => v,
                     Err(e) => return Err(crate::Error::MissingTraitImpl(e, $idx))
                 };
-                $fn::$fn($out, value, $width, $precision, $alignment, $sign, $hash, $zero)
+                branch!(($idx $($ret)?),$fn::$fn($out, value, $width, $precision, $alignment, $sign, $hash, $zero, $($($fields)*)?))
             },)*
         }
     };
@@ -56,6 +65,8 @@ mod binary;
 #[cfg(feature = "debug")]
 mod debug;
 mod display;
+#[cfg(feature = "iter")]
+mod iter;
 #[cfg(feature = "number")]
 mod lower_exp;
 #[cfg(feature = "number")]
@@ -99,7 +110,8 @@ pub(crate) fn format_value(
             LowerExp => lower_exp(get_lower_exp, "number"),
             UpperExp => upper_exp(get_upper_exp, "number"),
             Pointer => pointer(get_pointer, "pointer"),
+            Iter(range, format, join) => iter(get_iter, "iter") return,
         }
     }
-    .map_err(|e| Error::FmtError(e, idx))
+    .map_err(|e| Error::Fmt(e, idx))
 }
