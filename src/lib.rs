@@ -30,9 +30,11 @@ format a list of values with a format string and an optional join
 expression.
 
 The syntax is `{list:i(the format string, '{it}' is the array element)(the
-optional join)}`, an empty join can also be omitted `{list:i({it})}`. Should
-you need to use `)` inside your format string or join, you can add `#`
-similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals).
+optional join)}`, an empty join can also be omitted `{list:i({it})}`.
+
+Should you need to use `)` inside your format string or join, you can add `#`
+similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals)
+(i.e. `#(({it}))#`).
 
 It is also possible to only iterate a sub-slice specified through a range
 before the format string, i.e. `{list:i1..4({it})}`. For open ranges range
@@ -68,6 +70,7 @@ assert_eq!(
 //! - `debug` enables `?`, `x?` and `X?` trait specifiers
 //! - `number` enables `x`, `X`, `b`, `o`, `e` and `E` trait specifiers
 //! - `pointer` enables `p` trait specifiers
+//! - `iter` enables [`i`](#i-iter-format) trait specifier
 #![warn(clippy::pedantic, missing_docs)]
 #![allow(
     clippy::wildcard_imports,
