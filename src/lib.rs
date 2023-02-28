@@ -26,7 +26,7 @@
 //! format a list of values with a format string and an optional join
 //! expression.
 //!
-//! The syntax is `{list:i(the format string, `{it}` is the array element)(the
+//! The syntax is `{list:i(the format string, '{it}' is the array element)(the
 //! optional join)}`, an empty join can also be omitted `{list:i({it})}`. Should
 //! you need to use `)` inside your format string or join, you can add `#`
 //! similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals).
@@ -118,7 +118,7 @@ type Result<T = (), E = Error> = std::result::Result<T, E>;
 /// the type doesn't implement the expected trait, or the formatting itself
 /// failed.
 ///
-/// For more details have a look at [`Error`] and [`FormatArgumentError`].
+/// For more details have a look at [`Error`] and [`ParseError`].
 pub fn format<K: Borrow<str> + Eq + Hash>(
     format: &str,
     context: &HashMap<K, Formattable>,
@@ -153,7 +153,7 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
 /// the type doesn't implement the expected trait, or the formatting itself
 /// failed.
 ///
-/// For more details have a look at [`Error`] and [`FormatArgumentError`].
+/// For more details have a look at [`Error`] and [`ParseError`].
 pub fn write<'a, K: Borrow<str> + Eq + Hash, F: Borrow<Formattable<'a>>>(
     out: &mut impl Write,
     mut format: &str,
