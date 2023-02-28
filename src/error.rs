@@ -105,8 +105,8 @@ pub enum Trait {
 pub enum ParseError {
     /// Format spec at byte index is nether closed with a `}`
     FormatSpecUnclosed(usize),
-    /// Expected character at byte index
-    Expected(char, usize),
+    /// Expected sequence at byte index
+    Expected(&'static str, usize),
     /// Unable to parse specified width as usize
     InvalidWidth(ParseIntError, usize),
     /// Unable to parse specified precision as usize
@@ -115,6 +115,8 @@ pub enum ParseError {
     Fill(usize),
     /// Width, precision, `-`, `+` and `#` are not supported for `i`
     Iter(usize),
+    /// Unable to parse specified range bound as isize
+    RangeBound(ParseIntError, usize),
 }
 
 impl ParseError {
@@ -127,6 +129,7 @@ impl ParseError {
             InvalidPrecision(e, i) => InvalidPrecision(e, i + idx),
             Fill(i) => Fill(i + idx),
             Iter(i) => Iter(i + idx),
+            RangeBound(e, i) => RangeBound(e, i + idx),
         }
     }
 }
@@ -152,6 +155,9 @@ impl Display for ParseError {
                 f,
                 "Width, precision, `-`, `+` and `#` are not supported for `i` at {idx}"
             ),
+            ParseError::RangeBound(e, idx) => {
+                write!(f, "Unable to parse range bound at {idx} as isize: {e}")
+            }
         }
     }
 }

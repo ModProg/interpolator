@@ -110,7 +110,7 @@ pub(crate) fn format_value(
             LowerExp => lower_exp(get_lower_exp, "number"),
             UpperExp => upper_exp(get_upper_exp, "number"),
             Pointer => pointer(get_pointer, "pointer"),
-            Iter(format, join) => iter(get_iter, "iter") return,
+            Iter(range, format, join) => iter(get_iter, "iter") return,
         }
     }
     .map_err(|e| Error::Fmt(e, idx))

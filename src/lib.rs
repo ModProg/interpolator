@@ -29,7 +29,12 @@
 //! The syntax is `{list:i(the format string, `{it}` is the array element)(the
 //! optional join)}`, an empty join can also be omitted `{list:i({it})}`. Should
 //! you need to use `)` inside your format string or join, you can add `#`
-//! similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals)
+//! similar to rust's [raw string](https://doc.rust-lang.org/reference/tokens.html#raw-string-literals).
+//!
+//! It is also possible to only iterate a sub-slice specified through a range
+//! before the format string, i.e. `{list:i1..4({it})}`. For open ranges range
+//! bounds can also be omitted. To index from the end, you can use negative
+//! range bounds.
 //!
 //! A [`Formattable`] implementing iter is created using [`Formattable::iter`]:
 //!
@@ -41,10 +46,10 @@
 //! // reference
 //! let items = [&"hello", &"hi", &"hey"].map(Formattable::display);
 //! let items = Formattable::iter(&items);
-//! let format_str = "Greetings: {items:i(`{it}`)(, )}";
+//! let format_str = "Greetings: {items:i..-1(`{it}`)(, )} and {items:i-1..(`{it}`)}";
 //! assert_eq!(
 //!     format(format_str, &hash!("items" => items))?,
-//!     "Greetings: `hello`, `hi`, `hey`"
+//!     "Greetings: `hello`, `hi` and `hey`"
 //! );
 //! # return Ok::<(), interpolator::Error>(())
 //! ```
@@ -191,7 +196,7 @@ pub fn write<'a, K: Borrow<str> + Eq + Hash, F: Borrow<Formattable<'a>>>(
                 trait_,
                 *idx,
             )?;
-            ensure!(format.starts_with('}'), ParseError::Expected('}', *idx));
+            ensure!(format.starts_with('}'), ParseError::Expected("}", *idx));
             step(1, format, idx);
             continue;
         }
@@ -207,34 +212,26 @@ pub fn write<'a, K: Borrow<str> + Eq + Hash, F: Borrow<Formattable<'a>>>(
 
 #[cfg(test)]
 mod test {
+    use collection_literals::hash;
+
     use super::*;
 
     #[test]
     fn iter() {
-        // HashMap macro
-        use collection_literals::hash;
-        // Needs to be a slice of references so because `Formattable::display` expects a
-        // reference
-        let items = [&"hello", &"hi", &"hey"].map(Formattable::display);
-        let items = Formattable::iter(&items);
-        let format_str = "Greetings: {items:i(`{it}`)(,)}";
+        let list = &[&1, &5].map(Formattable::display);
+        let context = &hash!("h"=> Formattable::iter(list));
         assert_eq!(
-            format(format_str, &hash!("items" => items)).unwrap(),
-            "Greetings: `hello`, `hi`, `hey`"
+            format("{h:i(`{it:+05}`)#() )#}", context).unwrap(),
+            "`+0001`) `+0005`"
         );
-
-        assert_eq!(
-            format(
-                "{h:i((`{it}`),#() )#)}",
-                &[(
-                    "h",
-                    Formattable::iter(&[&"hi", &"hello"].map(Formattable::display)),
-                )]
-                .into_iter()
-                .collect(),
-            )
-            .unwrap(),
-            "`hi`) `hello`"
-        );
+        assert_eq!(format("{h:i(``)}", context).unwrap(), "````");
+        assert_eq!(format("{h:i..({it})}", context).unwrap(), "15");
+        assert_eq!(format("{h:i1..({it})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i1..1({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i2..1({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-1..({it})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i..-1({it})}", context).unwrap(), "1");
+        assert_eq!(format("{h:i..-2({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-5..-10({it})}", context).unwrap(), "");
     }
 }

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use super::*;
 
 fn alignment(c: u8) -> Option<Alignment> {
@@ -52,10 +54,33 @@ pub(crate) enum TraitSpec<'a> {
     #[cfg(feature = "pointer")]
     Pointer,
     #[cfg(feature = "iter")]
-    Iter(&'a str, Option<&'a str>),
+    Iter(Option<Range>, &'a str, Option<&'a str>),
 }
 
+fn parse_number<T: FromStr<Err = ParseIntError>>(
+    format: &mut &str,
+    idx: &mut usize,
+    start: usize,
+) -> Result<T> {
+    let len = format
+        .find(|c: char| c != '-' && !c.is_ascii_digit())
+        .ok_or(ParseError::FormatSpecUnclosed(start))?;
+    let i = format[..len]
+        .parse()
+        .map_err(|e| ParseError::RangeBound(e, *idx))?;
+    step(len, format, idx);
+    Ok(i)
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct Range(
+    pub(crate) Option<isize>,
+    pub(crate) bool,
+    pub(crate) Option<isize>,
+);
+
 impl<'a> TraitSpec<'a> {
+    #[allow(clippy::too_many_lines)]
     fn from_str(format: &mut &'a str, idx: &mut usize, start: usize) -> Result<Self> {
         if format.starts_with('}') {
             return Ok(Self::Display);
@@ -114,10 +139,35 @@ impl<'a> TraitSpec<'a> {
             #[cfg(feature = "iter")]
             b'i' => {
                 step(1, format, idx);
-                dbg!(&format);
                 return Ok(TraitSpec::Iter(
+                    if format.starts_with('(') {
+                        None
+                    } else {
+                        Some(Range(
+                            if format.starts_with("..") {
+                                step(2, format, idx);
+                                None
+                            } else {
+                                let lhs = parse_number(format, idx, start)?;
+                                ensure!(format.starts_with(".."), ParseError::Expected("..", *idx));
+                                step(2, format, idx);
+                                Some(lhs)
+                            },
+                            if format.starts_with('=') {
+                                step(1, format, idx);
+                                true
+                            } else {
+                                false
+                            },
+                            if format.starts_with('(') {
+                                None
+                            } else {
+                                Some(parse_number(format, idx, start)?)
+                            },
+                        ))
+                    },
                     collect_parenthesized(format, idx, start)?,
-                    if dbg!(&format).starts_with('(') {
+                    if format.starts_with('(') || format.starts_with('#') {
                         let join = collect_parenthesized(format, idx, start)?;
                         Some(join)
                     } else {
@@ -127,7 +177,7 @@ impl<'a> TraitSpec<'a> {
             }
             #[cfg(not(feature = "iter"))]
             b'i' => Err(Error::UnsupportedOption("i", "iter", *idx)),
-            _ => Err(ParseError::Expected('}', *idx).into()),
+            _ => Err(ParseError::Expected("}", *idx).into()),
         }
         .map(|m| {
             step(1, format, idx);
@@ -145,7 +195,7 @@ fn collect_parenthesized<'a>(
         .find(|c| c != '#')
         .ok_or(ParseError::FormatSpecUnclosed(outer_start))?;
     step(pounds, format, idx);
-    ensure! {format.starts_with('('), ParseError::Expected('(', *idx)};
+    ensure! {format.starts_with('('), ParseError::Expected("(", *idx)};
     step(1, format, idx);
     let start = *idx;
     let inner = *format;
@@ -209,7 +259,7 @@ impl<'a> FormatArgument<'a> {
             let fill = format
                 .chars()
                 .next()
-                .ok_or(ParseError::Expected('}', *idx))?;
+                .ok_or(ParseError::Expected("}", *idx))?;
             if format[fill.len_utf8()..].is_empty() {
                 return Ok(it);
             }
@@ -313,7 +363,7 @@ mod test {
         );
         assert_eq!(
             collect_parenthesized(&mut "###a", &mut 0, 10).unwrap_err(),
-            Error::Parse(ParseError::Expected('(', 3))
+            Error::Parse(ParseError::Expected("(", 3))
         );
     }
 }
