@@ -92,6 +92,7 @@ impl<'a> Formattable<'a> {
     }
 }
 
+#[cfg(feature = "iter")]
 impl<'a> Formattable<'a> {
     /// Creates a [`Formattable`] from a list of values
     pub fn iter(value: &'a [Formattable<'a>]) -> Self {

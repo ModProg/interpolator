@@ -70,3 +70,29 @@ pub(crate) fn iter(
         _ => Err(ParseError::Iter(0).into()),
     }
 }
+
+#[cfg(test)]
+mod test {
+    use collection_literals::hash;
+
+    use super::*;
+
+    #[test]
+    fn iter() {
+        let list = &[&1, &5].map(Formattable::display);
+        let context = &hash!("h"=> Formattable::iter(list));
+        assert_eq!(
+            format("{h:i(`{it:+05}`)#() )#}", context).unwrap(),
+            "`+0001`) `+0005`"
+        );
+        assert_eq!(format("{h:i(``)}", context).unwrap(), "````");
+        assert_eq!(format("{h:i..({it})}", context).unwrap(), "15");
+        assert_eq!(format("{h:i1..({it})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i1..1({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i2..1({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-1..({it})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i..-1({it})}", context).unwrap(), "1");
+        assert_eq!(format("{h:i..-2({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-5..-10({it})}", context).unwrap(), "");
+    }
+}

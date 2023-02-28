@@ -12,7 +12,7 @@ documentation = "https://docs.rs/interpolator"
 include = ["src/**/*", "LICENSE-*", "README.md", "CHANGELOG.md"]
 
 [features]
-default = ["debug", "number", "pointer", "iter"]
+# default = ["debug", "number", "pointer", "iter"]
 debug = []
 number = []
 pointer = []

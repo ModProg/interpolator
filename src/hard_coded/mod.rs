@@ -49,13 +49,14 @@ macro_rules! call_format_value {
         }
     ) => {
         match $trait_ {
-            $($(#[cfg(feature = $feature)])? crate::TraitSpec::$Trait$(($($fields)*))? => {
+            $($(#[cfg(feature = $feature)])? TraitSpec::$Trait$(($($fields)*))? => {
                 let value = match $value.$getter() {
                     Ok(v) => v,
-                    Err(e) => return Err(crate::Error::MissingTraitImpl(e, $idx))
+                    Err(e) => return Err(Error::MissingTraitImpl(e, $idx))
                 };
                 branch!(($idx $($ret)?),$fn::$fn($out, value, $width, $precision, $alignment, $sign, $hash, $zero, $($($fields)*)?))
             },)*
+            TraitSpec::Phantom(_) => unreachable!()
         }
     };
 }
