@@ -1,6 +1,6 @@
 [package]
 name = "interpolator"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 categories = ["template-engine", "value-formatting", "text-processing"]
 description = "runtime format strings, fully compatible with std's macros"
