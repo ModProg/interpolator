@@ -1,7 +1,7 @@
 use super::*;
 /// Utility struct holding references to the trait implementation of a value to
 /// enable runtime verification and execution of them
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 #[must_use]
 pub struct Formattable<'a> {
     #[cfg(any(feature = "debug", feature = "number"))]

@@ -1,7 +1,8 @@
 use super::*;
 
-#[derive(Debug, PartialEq, Clone)]
 /// Error returned by [`format()`].
+#[derive(Debug, PartialEq, Clone)]
+#[non_exhaustive]
 pub enum Error {
     /// Value was formatted with unimplemented trait.
     /// - `.0` the trait
@@ -66,9 +67,9 @@ impl Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, PartialEq, Clone)]
-#[non_exhaustive]
 /// The trait used to format.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[non_exhaustive]
 pub enum Trait {
     /// [`Binary`]
     #[cfg(feature = "number")]
@@ -101,8 +102,9 @@ pub enum Trait {
     Iter,
 }
 
-#[derive(Debug, PartialEq, Clone)]
 /// Error caused by invalid format string
+#[derive(Debug, PartialEq, Clone)]
+#[non_exhaustive]
 pub enum ParseError {
     /// Format spec at byte index is nether closed with a `}`
     FormatSpecUnclosed(usize),
