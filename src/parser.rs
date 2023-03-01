@@ -55,7 +55,7 @@ pub(crate) enum TraitSpec<'a> {
     #[cfg(feature = "pointer")]
     Pointer,
     #[cfg(feature = "iter")]
-    Iter(Option<Range>, &'a str, Option<&'a str>),
+    Iter(Option<Range>, Option<&'a str>, Option<&'a str>),
     #[allow(unused)]
     Phantom(&'a Infallible),
 }
@@ -142,36 +142,45 @@ impl<'a> TraitSpec<'a> {
             b'i' => {
                 step(1, format, idx);
                 return Ok(TraitSpec::Iter(
-                    if format.starts_with('(') {
-                        None
-                    } else {
-                        Some(Range(
-                            if format.starts_with("..") {
-                                step(2, format, idx);
-                                None
-                            } else {
-                                let lhs = parse_number(format, idx, start, ParseError::RangeBound)?;
-                                ensure!(format.starts_with(".."), ParseError::Expected("..", *idx));
-                                step(2, format, idx);
-                                Some(lhs)
-                            },
-                            if format.starts_with('=') {
+                    if format.starts_with('-')
+                        || format.starts_with("..")
+                        || format.starts_with(|c: char| c.is_ascii_digit())
+                    {
+                        let lhs = if format.starts_with("..") {
+                            None
+                        } else {
+                            Some(parse_number(format, idx, start, ParseError::RangeBound)?)
+                        };
+                        let inclusive;
+                        let rhs;
+                        if format.starts_with("..") {
+                            step(2, format, idx);
+                            inclusive = format.starts_with('=');
+                            if inclusive {
                                 step(1, format, idx);
-                                true
-                            } else {
-                                false
-                            },
-                            if format.starts_with('(') {
-                                None
-                            } else {
+                            }
+                            rhs = if format.starts_with('-')
+                                || format.starts_with(|c: char| c.is_ascii_digit())
+                            {
                                 Some(parse_number(format, idx, start, ParseError::RangeBound)?)
-                            },
-                        ))
+                            } else {
+                                None
+                            }
+                        } else {
+                            inclusive = true;
+                            rhs = lhs;
+                        }
+                        Some(Range(lhs, inclusive, rhs))
+                    } else {
+                        None
                     },
-                    collect_parenthesized(format, idx, start)?,
                     if format.starts_with('(') || format.starts_with('#') {
-                        let join = collect_parenthesized(format, idx, start)?;
-                        Some(join)
+                        Some(collect_parenthesized(format, idx, start)?)
+                    } else {
+                        None
+                    },
+                    if format.starts_with('(') || format.starts_with('#') {
+                        Some(collect_parenthesized(format, idx, start)?)
                     } else {
                         None
                     },
@@ -327,7 +336,7 @@ impl<'a> FormatArgument<'a> {
 mod test {
     use super::*;
     #[test]
-    fn collect_braced() {
+    fn collect_parenthesized() {
         use super::collect_parenthesized;
         let mut idx = 0;
         let mut format = "()";
