@@ -4,10 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2023-02-28
-
+## [0.3.0] - 2023-03-01
 ### Added
-- Added `i` iter format
+- `i` gained implicit format `({})` when none is specified `{:i}`
+- `i` gained support for indexing single values without range `{:i1}`
+
+### Changed
+- **Breaking Change**: `i` uses `{}` instead of `{it}`
+
+## [0.2.0] - 2023-02-28
+### Added
+- `i` iter format
 
 ### Changed
 - **Breaking Change**: Improved naming of error enums and variants

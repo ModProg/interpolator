@@ -4,7 +4,7 @@ fn write_iter(
     out: &mut impl Write,
     value: &[Formattable<'_>],
     range: Option<Range>,
-    format: &str,
+    format: Option<&str>,
     join: Option<&str>,
 ) -> Result {
     if value.is_empty() {
@@ -21,18 +21,31 @@ fn write_iter(
         .min(rhs);
 
     if rhs > lhs {
-        for value in &value[lhs..rhs - 1] {
-            let mut context = HashMap::new();
-            context.insert("it", value);
-            write(out, format, &context)?;
-            if let Some(join) = join {
-                write!(out, "{join}").map_err(|e| Error::Fmt(e, 0))?;
+        if let Some(format) = format {
+            for value in &value[lhs..rhs - 1] {
+                let mut context = HashMap::new();
+                context.insert("", value);
+                write(out, format, &context)?;
+                if let Some(join) = join {
+                    write!(out, "{join}").map_err(|e| Error::Fmt(e, 0))?;
+                }
             }
-        }
-        if let Some(value) = value[..rhs].last() {
-            let mut context = HashMap::new();
-            context.insert("it", value);
-            write(out, format, &context)?;
+            if let Some(value) = value[..rhs].last() {
+                let mut context = HashMap::new();
+                context.insert("", value);
+                write(out, format, &context)?;
+            }
+        } else {
+            for value in &value[lhs..rhs] {
+                write!(
+                    out,
+                    "{}",
+                    value
+                        .get_display()
+                        .map_err(|e| Error::MissingTraitImpl(e, 0))?
+                )
+                .map_err(|e| Error::Fmt(e, 0))?;
+            }
         }
     }
     Ok(())
@@ -49,7 +62,7 @@ pub(crate) fn iter(
     hash: bool,
     zero: bool,
     range: Option<Range>,
-    format: &str,
+    format: Option<&str>,
     join: Option<&str>,
 ) -> Result {
     match (precision, sign, hash, zero) {
@@ -82,17 +95,24 @@ mod test {
         let list = &[&1, &5].map(Formattable::display);
         let context = &hash!("h"=> Formattable::iter(list));
         assert_eq!(
-            format("{h:i(`{it:+05}`)#() )#}", context).unwrap(),
+            format("{h:i(`{:+05}`)#() )#}", context).unwrap(),
             "`+0001`) `+0005`"
         );
         assert_eq!(format("{h:i(``)}", context).unwrap(), "````");
-        assert_eq!(format("{h:i..({it})}", context).unwrap(), "15");
-        assert_eq!(format("{h:i1..({it})}", context).unwrap(), "5");
-        assert_eq!(format("{h:i1..1({it})}", context).unwrap(), "");
-        assert_eq!(format("{h:i2..1({it})}", context).unwrap(), "");
-        assert_eq!(format("{h:i-1..({it})}", context).unwrap(), "5");
-        assert_eq!(format("{h:i..-1({it})}", context).unwrap(), "1");
-        assert_eq!(format("{h:i..-2({it})}", context).unwrap(), "");
-        assert_eq!(format("{h:i-5..-10({it})}", context).unwrap(), "");
+        assert_eq!(format("{h:i..({})}", context).unwrap(), "15");
+        assert_eq!(format("{h:i1..({})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i1..1({})}", context).unwrap(), "");
+        assert_eq!(format("{h:i2..1({})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-1..({})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i..-1({})}", context).unwrap(), "1");
+        assert_eq!(format("{h:i..-2({})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-5..-10({})}", context).unwrap(), "");
+        assert_eq!(format("{h:i-1({})}", context).unwrap(), "5");
+        assert_eq!(format("{h:i1}", context).unwrap(), "5");
+        assert_eq!(format("{h:i..}", context).unwrap(), "15");
+        assert_eq!(format("{h:i}", context).unwrap(), "15");
+        assert_eq!(format("{h:i..1}", context).unwrap(), "1");
+        assert_eq!(format("{h:i1..}", context).unwrap(), "5");
+        assert_eq!(format("{h:i..=-1}", context).unwrap(), "15");
     }
 }
