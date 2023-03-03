@@ -45,7 +45,7 @@ macro_rules! call_format_value {
         $zero:ident,
         $trait_:ident,
         $idx:ident {
-            $($Trait:ident$(($($fields:tt)*))? => $fn:ident($getter:ident $(, $feature:literal)?) $($ret:ident)?,)*
+            $($Trait:ident$(($($fields:tt)*))? => $fn:ident($getter:ident $(, $feature:literal)? $(, $args:ident)*) $($ret:ident)?,)*
         }
     ) => {
         match $trait_ {
@@ -54,7 +54,7 @@ macro_rules! call_format_value {
                     Ok(v) => v,
                     Err(e) => return Err(Error::MissingTraitImpl(e, $idx))
                 };
-                branch!(($idx $($ret)?),$fn::$fn($out, value, $width, $precision, $alignment, $sign, $hash, $zero, $($($fields)*)?))
+                branch!(($idx $($ret)?),$fn::$fn($out, value, $width, $precision, $alignment, $sign, $hash, $zero, $($($fields)*)? $(, $args)*))
             },)*
             TraitSpec::Phantom(_) => unreachable!()
         }
@@ -97,6 +97,8 @@ pub(crate) fn format_value(
     zero: bool,
     trait_: TraitSpec,
     idx: usize,
+    #[allow(unused)]
+    context: &impl Context,
 ) -> Result<()> {
     call_format_value! {
         match out, value, width, precision, alignment, sign, hash, zero, trait_, idx {
@@ -111,7 +113,7 @@ pub(crate) fn format_value(
             LowerExp => lower_exp(get_lower_exp, "number"),
             UpperExp => upper_exp(get_upper_exp, "number"),
             Pointer => pointer(get_pointer, "pointer"),
-            Iter(range, format, join) => iter(get_iter, "iter") return,
+            Iter(range, format, join) => iter(get_iter, "iter", context) return,
         }
     }
     .map_err(|e| Error::Fmt(e, idx))

@@ -14,11 +14,12 @@ Takes a string and a context, containing `Formattable` values, returns a
 string.
 
 ```rs
+use std::collections::HashMap;
 use template::{format, Formattable};
 
 let formatted = format(
     "{value:+05}", // could be dynamic
-    &[("value", Formattable::display(&12))].into_iter().collect(),
+    &[("value", Formattable::display(&12))].into_iter().collect::<HashMap<_,_>>(),
 )
 .unwrap();
 
@@ -32,13 +33,14 @@ Takes a mutable `Write` e.g. `&mut String`, a format string and a context,
 containing `Formattable` values.
                                                                             
 ```rs
+use std::collections::HashMap;
 use template::{write, Formattable};
                                                                             
 let mut buf = String::new();
 write(
     &mut buf,
     "{value:+05}", // could be dynamic
-    &[("value", Formattable::display(&12))].into_iter().collect(),
+    &[("value", Formattable::display(&12))].into_iter().collect::<HashMap<_,_>>(),
 )
 .unwrap();
                                                                             
