@@ -9,11 +9,14 @@
 //! [features](#features).
 //!
 //! ```
+//! # use std::collections::HashMap;
 //! use interpolator::{format, Formattable};
 //!
 //! let formatted = format(
 //!     "{value:+05}", // could be dynamic
-//!     &[("value", Formattable::display(&12))].into_iter().collect(),
+//!     &[("value", Formattable::display(&12))]
+//!         .into_iter()
+//!         .collect::<HashMap<_, _>>(),
 //! )?;
 //!
 //! assert_eq!(formatted, format!("{:+05}", 12));
@@ -55,10 +58,10 @@ use interpolator::{format, Formattable};
 // reference
 let items = [&"hello", &"hi", &"hey"].map(Formattable::display);
 let items = Formattable::iter(&items);
-let format_str = "Greetings: {items:i..-1(`{}`)(, )} and `{items:i-1}`";
+let format_str = "Greetings: {items:i..-1(`{}{outside}`)(, )} and `{items:i-1}{outside}`";
 assert_eq!(
-    format(format_str, &hash!("items" => items))?,
-    "Greetings: `hello`, `hi` and `hey`"
+    format(format_str, &hash!("items" => items, "outside" => Formattable::display(&'!')))?,
+    "Greetings: `hello!`, `hi!` and `hey!`"
 );
 # return Ok::<(), interpolator::Error>(())
 ```"#
@@ -112,11 +115,14 @@ type Result<T = (), E = Error> = std::result::Result<T, E>;
 /// string.
 ///
 /// ```
+/// # use std::collections::HashMap;
 /// use interpolator::{format, Formattable};
 ///
 /// let formatted = format(
 ///     "{value:+05}", // could be dynamic
-///     &[("value", Formattable::display(&12))].into_iter().collect(),
+///     &[("value", Formattable::display(&12))]
+///         .into_iter()
+///         .collect::<HashMap<_, _>>(),
 /// )
 /// .unwrap();
 ///
@@ -130,13 +136,46 @@ type Result<T = (), E = Error> = std::result::Result<T, E>;
 /// failed.
 ///
 /// For more details have a look at [`Error`] and [`ParseError`].
-pub fn format<K: Borrow<str> + Eq + Hash>(
-    format: &str,
-    context: &HashMap<K, Formattable>,
-) -> Result<String> {
+pub fn format(format: &str, context: &impl Context) -> Result<String> {
     let mut out = String::with_capacity(format.len());
     write(&mut out, format, context)?;
     Ok(out)
+}
+
+/// Context for `format` and `write`
+pub trait Context {
+    /// Returns the [`Formattable`] for the requested key
+    fn get(&self, key: &str) -> Option<Formattable>;
+}
+
+impl<K: Borrow<str> + Eq + Hash> Context for HashMap<K, Formattable<'_>> {
+    fn get(&self, key: &str) -> Option<Formattable> {
+        HashMap::get(self, key).copied()
+    }
+}
+
+#[cfg(feature = "iter")]
+struct IterContext<'a> {
+    outer: &'a dyn Context,
+    inner: Formattable<'a>,
+}
+
+#[cfg(feature = "iter")]
+impl<'a> IterContext<'a> {
+    fn new(outer: &'a impl Context, inner: Formattable<'a>) -> Self {
+        Self { outer, inner }
+    }
+}
+
+#[cfg(feature = "iter")]
+impl<'a> Context for IterContext<'a> {
+    fn get(&self, key: &str) -> Option<Formattable> {
+        if key.is_empty() {
+            Some(self.inner)
+        } else {
+            self.outer.get(key)
+        }
+    }
 }
 
 /// Runtime version of [`write!`].
@@ -145,13 +184,16 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
 /// containing [`Formattable`] values.
 ///
 /// ```
+/// # use std::collections::HashMap;
 /// use interpolator::{write, Formattable};
 ///
 /// let mut buf = String::new();
 /// write(
 ///     &mut buf,
 ///     "{value:+05}", // could be dynamic
-///     &[("value", Formattable::display(&12))].into_iter().collect(),
+///     &[("value", Formattable::display(&12))]
+///         .into_iter()
+///         .collect::<HashMap<_, _>>(),
 /// )
 /// .unwrap();
 ///
@@ -165,11 +207,7 @@ pub fn format<K: Borrow<str> + Eq + Hash>(
 /// failed.
 ///
 /// For more details have a look at [`Error`] and [`ParseError`].
-pub fn write<'a, K: Borrow<str> + Eq + Hash, F: Borrow<Formattable<'a>>>(
-    out: &mut impl Write,
-    mut format: &str,
-    context: &'a HashMap<K, F>,
-) -> Result {
+pub fn write(out: &mut impl Write, mut format: &str, context: &impl Context) -> Result {
     let format = &mut format;
     let idx = &mut 0;
     while !format.is_empty() {
@@ -206,6 +244,7 @@ pub fn write<'a, K: Borrow<str> + Eq + Hash, F: Borrow<Formattable<'a>>>(
                 zero,
                 trait_,
                 *idx,
+                context,
             )?;
             ensure!(format.starts_with('}'), ParseError::Expected("}", *idx));
             step(1, format, idx);

@@ -6,6 +6,7 @@ fn write_iter(
     range: Option<Range>,
     format: Option<&str>,
     join: Option<&str>,
+    context: &impl Context,
 ) -> Result {
     if value.is_empty() {
         return Ok(());
@@ -23,17 +24,13 @@ fn write_iter(
     if rhs > lhs {
         if let Some(format) = format {
             for value in &value[lhs..rhs - 1] {
-                let mut context = HashMap::new();
-                context.insert("", value);
-                write(out, format, &context)?;
+                write(out, format, &IterContext::new(context, *value))?;
                 if let Some(join) = join {
-                    write!(out, "{join}").map_err(|e| Error::Fmt(e, 0))?;
+                    write(out, join, context)?;
                 }
             }
             if let Some(value) = value[..rhs].last() {
-                let mut context = HashMap::new();
-                context.insert("", value);
-                write(out, format, &context)?;
+                write(out, format, &IterContext::new(context, *value))?;
             }
         } else {
             for value in &value[lhs..rhs] {
@@ -64,12 +61,13 @@ pub(crate) fn iter(
     range: Option<Range>,
     format: Option<&str>,
     join: Option<&str>,
+    context: &impl Context,
 ) -> Result {
     match (precision, sign, hash, zero) {
         (None, Sign::None, false, false) => {
             if let Some(width) = width {
                 let mut buf = String::new();
-                write_iter(&mut buf, value, range, format, join)?;
+                write_iter(&mut buf, value, range, format, join, context)?;
                 match alignment {
                     Alignment::Left | Alignment::None => write!(out, "{buf:<width$}"),
                     Alignment::Center => write!(out, "{buf:^width$}"),
@@ -77,7 +75,7 @@ pub(crate) fn iter(
                 }
                 .map_err(|e| Error::Fmt(e, 0))
             } else {
-                write_iter(out, value, range, format, join)
+                write_iter(out, value, range, format, join, context)
             }
         }
         _ => Err(ParseError::Iter(0).into()),
@@ -114,5 +112,12 @@ mod test {
         assert_eq!(format("{h:i..1}", context).unwrap(), "1");
         assert_eq!(format("{h:i1..}", context).unwrap(), "5");
         assert_eq!(format("{h:i..=-1}", context).unwrap(), "15");
+    }
+    #[test]
+    fn outside_context() {
+        let list = &[&"hi", &"ho"].map(Formattable::display);
+        let context = &hash!("list" => Formattable::iter(list), "x" => Formattable::display(&"?!"));
+        assert_eq!(format("{list:i({}{x})}", context).unwrap(), "hi?!ho?!");
+        assert_eq!(format("{list:i({})({x})}", context).unwrap(), "hi?!ho");
     }
 }

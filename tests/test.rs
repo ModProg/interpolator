@@ -120,13 +120,16 @@ fn test(
     t.pass_inline(
         &converter.to_token_stream().to_string(),
         &quote! {
-            use interpolator::{{format, Formattable, write}};
-            use std::thread;
             use std::fmt::Write;
+            use std::thread;
+
+            use collection_literals::hash;
+            use interpolator::{{format, Formattable, write}};
+
             fn main() {
                 // This stack overflows without the thread on windows + nightly
                 thread::spawn(move ||{
-                    let value = &[("ident", Formattable::#converter(&#value))].into_iter().collect();
+                    let value = &hash!("ident" => Formattable::#converter(&#value));
                     #(
                         assert_eq!(
                             format(#format_args, value).unwrap(),
