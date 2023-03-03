@@ -100,8 +100,8 @@ use std::num::ParseIntError;
 #[macro_use]
 mod error;
 pub use error::*;
-mod hard_coded;
-use hard_coded::format_value;
+mod fmt;
+use fmt::format_value;
 mod formattable;
 pub use formattable::*;
 mod parser;
