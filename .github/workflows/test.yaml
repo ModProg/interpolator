@@ -59,6 +59,7 @@ jobs:
         run:
           cargo test ${{ matrix.features }} --all-targets --no-fail-fast --workspace
       - name: Doc Test
+        if: "matrix.features == '--all-features'"
         run:
           cargo test ${{ matrix.features }} --doc --no-fail-fast --workspace
       - name: Build Docs

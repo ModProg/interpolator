@@ -19,6 +19,7 @@ pointer = []
 iter = []
 
 [dev-dependencies]
+assert-dbg = { path = "assert-dbg" }
 collection_literals = "1.0.1"
 derive_more = "0.99.17"
 proptest = "1.1.0"

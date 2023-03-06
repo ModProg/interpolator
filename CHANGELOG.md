@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking Changed**: `format` and `write` take `Context` trait, this breaks type inference
 - `i` allows access to outer variables
 
+### Added
+- `set_{trait}` functions on `Formattable`
+- Macros for format, write and print
+
 ## [0.4.0] - 2023-03-01
 ### Changed
 - **Breaking Change**: Made error enums `non_exhaustive`
