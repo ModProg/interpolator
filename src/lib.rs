@@ -1,4 +1,4 @@
-//! Runtime implementation of [`format!`].
+//! Runtime implementation of [`format!`](std::format).
 //!
 //! # `std::fmt` compatible formatting
 //!
@@ -67,7 +67,26 @@ assert_eq!(
 ```"#
 )]
 
-//! See [`format`](format()) and [`write`](write()) for details.
+//! See [`format()`] and [`write()`] for details.
+//!
+//! # Macros
+//!
+//! To simplify creating contexts, some macros are provided.
+//!
+//! - [`context!`] creates a [`HashMap<&str, Formattable>`](HashMap) to be used
+//!   with [`format()`].
+#![cfg_attr(
+    feature = "iter",
+    doc = r"- [`list!`] creates a [`Formattable`] implementing supporting [iter](`i`-iter-format)."
+)]
+//! - [`iformat!`] and [`iwrite!`] macros matching the behaviour of [`format()`]
+//!   and [`write()`] but allowing to specify context directly.
+//! - Most of std's formatting macros are supported with an `i` prefix:
+//!   - [`iwriteln!`]
+//!   - [`iprint!`]
+//!   - [`iprintln!`]
+//!   - [`ieprint!`]
+//!   - [`ieprintln!`]
 //!
 //! # Features
 //! By default only [`Display`] is supported, the rest of the
@@ -106,6 +125,7 @@ mod formattable;
 pub use formattable::*;
 mod parser;
 use parser::*;
+mod macros;
 
 type Result<T = (), E = Error> = std::result::Result<T, E>;
 

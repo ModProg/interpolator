@@ -97,8 +97,7 @@ pub(crate) fn format_value(
     zero: bool,
     trait_: TraitSpec,
     idx: usize,
-    #[allow(unused)]
-    context: &impl Context,
+    #[allow(unused)] context: &impl Context,
 ) -> Result<()> {
     call_format_value! {
         match out, value, width, precision, alignment, sign, hash, zero, trait_, idx {
