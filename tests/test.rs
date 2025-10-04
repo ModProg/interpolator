@@ -15,11 +15,11 @@ use quote::{quote, ToTokens};
 #[derive(Debug, Arbitrary, Display, Clone)]
 #[allow(non_camel_case_types)]
 enum Alignment {
-    #[display(fmt = "<")]
+    #[display("<")]
     Left,
-    #[display(fmt = "^")]
+    #[display("^")]
     Center,
-    #[display(fmt = ">")]
+    #[display(">")]
     Right,
 }
 
@@ -27,13 +27,13 @@ enum Alignment {
 #[allow(non_camel_case_types)]
 enum Trait {
     #[default]
-    #[display(fmt = "")]
+    #[display("")]
     Display,
-    #[display(fmt = "?")]
+    #[display("?")]
     Question,
-    #[display(fmt = "x?")]
+    #[display("x?")]
     xQuestion,
-    #[display(fmt = "X?")]
+    #[display("X?")]
     XQuestion,
     x,
     X,
@@ -46,12 +46,12 @@ enum Trait {
 
 #[derive(Debug, Default, Arbitrary, Display)]
 enum Sign {
-    #[display(fmt = "+")]
+    #[display("+")]
     Plus,
-    #[display(fmt = "-")]
+    #[display("-")]
     Minus,
     #[default]
-    #[display(fmt = "")]
+    #[display("")]
     None,
 }
 

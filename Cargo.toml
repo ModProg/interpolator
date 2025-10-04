@@ -21,7 +21,7 @@ iter = []
 [dev-dependencies]
 assert-dbg = { path = "assert-dbg" }
 collection_literals = "1.0.1"
-derive_more = "0.99.17"
+derive_more = { version = "2.0.0", features = ["display"] }
 proptest = "1.1.0"
 proptest-derive = "0.6.0"
 quote = "1.0.23"
